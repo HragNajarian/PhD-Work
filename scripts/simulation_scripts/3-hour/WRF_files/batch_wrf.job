@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH -p radclouds
+#SBATCH -N 3
+#SBATCH -n 168
+#SBATCH --exclusive
+#SBATCH --output=outbatch.%j.txt
+#SBATCH --error=outbatch.%j.txt
+#SBATCH -t 03:00:00 # max job run time HH:MM:SS
+
+
+module purge
+source bashrc_wrf
+
+
+mpirun ./wrf.exe
+

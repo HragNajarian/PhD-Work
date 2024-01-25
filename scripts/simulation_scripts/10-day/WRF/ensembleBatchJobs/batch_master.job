@@ -1,0 +1,54 @@
+#!/bin/bash
+#SBATCH -p radclouds
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --nodelist=c793
+##SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 1:00:00 # max job run time HH:MM:SS
+
+# This .job shall be located within the WRF/run directory.
+# Make sure the restart files are in the WRF/run directory if you are using restart files.
+# Declare the parent dir:
+	# This is where you would keep all the directories where the simulations will be held.
+parent_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff"
+# Declare the WRF/run dir:
+wrf_run_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfstuff/WRF/run"
+
+# List all the directories that have been made via mkdir_and_subdirectories.py
+directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -type d | sort))
+# Declare a counter. This acts as a condition for batch_real.job.
+counter=0
+for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loops through directories)
+	echo "This is the counter: ${counter}"
+	echo "This is the current processing directory: ${dir}"
+
+	# Step 1, if this is the first itteration, then comment out the dependency within the batch_real.job, else make it dependent on if batch_wrf.job has completed
+	if [[ "$counter" -eq 0 ]]; then
+		sed -i '/--dependency/c\##SBATCH --dependency' "$wrf_run_dir/batch_real.job"
+		echo "Counter is equal to zero"
+	else
+		sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_wrf_id}" "$wrf_run_dir/batch_real.job"
+	fi
+	# Step 2, run batch_real.job and capture the JobID
+		# Arg 1 and 2 within the sbatch command are used to copy the correct namelist.input into the run directory.
+	export job_real_id=$(sbatch "$wrf_run_dir/batch_real.job" "$dir/namelist.input" "$wrf_run_dir"|tr -d -c 0-9)
+	echo "batch_real Job ID: ${job_real_id}"
+
+	# Step 3, set a dependency for batch_wrf.job where it only runs once batch_real.job is completed.
+	sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_real_id}" "$wrf_run_dir/batch_wrf.job"
+	# Step 4, run batch_wrf.job and capture the JobID
+		# Arg 1 and 2 within the sbatch command are used to move the wrfout files to their raw directories
+	export job_wrf_id=$(sbatch "$wrf_run_dir/batch_wrf.job" "$wrf_run_dir/wrfout*" "$dir/raw"|tr -d -c 0-9)
+	echo "batch_wrf Job ID: ${job_wrf_id}"
+
+	# Step 5, set a dependency for master_post_proc.job where it only runs once batch_wrf.job is completed.
+	sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_wrf_id}" "/home/hragnajarian/experiment_files/master_post_proc.job"
+	# Step 6, run master_post_proc.job and capture the JobID
+	export job_post_proc_id=$(sbatch "/home/hragnajarian/experiment_files/master_post_proc.job" "$dir"|tr -d -c 0-9)
+	echo "Batch post processing ID: ${job_post_proc_id}"
+
+	# Advance the counter so that the if else fi statement works
+	((counter++))
+done

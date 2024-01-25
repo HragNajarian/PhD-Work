@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH -p radclouds
+#SBATCH -N 1
+#SBATCH -n 64
+#SBATCH --nodelist=c874
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+mamba init
+mamba activate WRF_Xarray
+python -u /home/hragnajarian/PhD/post_processWRF/extract_variable.py $1	# $1 is the parent_dir where directories raw, L1, L2, and L3 are located
+
