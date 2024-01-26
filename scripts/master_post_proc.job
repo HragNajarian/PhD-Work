@@ -1,0 +1,43 @@
+#!/bin/bash
+#SBATCH --job-name=job_post_proc
+##SBATCH --dependency
+#SBATCH -p radclouds
+#SBATCH -N 1
+#SBATCH -n 64
+#SBATCH --nodelist=c874
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+# IMPORTANT: This .job must be read with an argument ($1) that is equal to the parent directory of the respective simulation.
+
+# This is a master script that will concat all the wrfout files (raw), extract variables (L1), interpolate variables (L2), and do cross-sectional analysis (L3).
+
+# Concat
+export job_post_proc_id=$(sbatch /home/hragnajarian/PhD/scripts/post_proc.job $1|tr -d -c 0-9)
+echo "post_proc Job ID: ${job_post_proc_id}"
+
+# Extract
+sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_post_proc_id}" "/home/hragnajarian/PhD/scripts/run_extract.job"
+export job_run_extract_id=$(sbatch /home/hragnajarian/PhD/scripts/run_extract.job $1|tr -d -c 0-9)
+echo "post_proc Job ID: ${job_run_extract_id}"
+
+# Interpolate
+sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_interp.job"
+export job_run_interp_id=$(sbatch /home/hragnajarian/PhD/scripts/run_interp.job $1|tr -d -c 0-9)
+echo "post_proc Job ID: ${job_run_interp_id}"
+
+# Cross-section
+sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
+export job_run_cross_section_id=$(sbatch /home/hragnajarian/PhD/scripts/run_cross_section.job $1|tr -d -c 0-9)
+echo "post_proc Job ID: ${job_run_cross_section_id}"
+
+# # Concat
+# sbatch /home/hragnajarian/experiment_files/post_proc.job $1
+# # Extract
+# sbatch /home/hragnajarian/experiment_files/run_extract.job $1
+# # Interpolate
+# sbatch /home/hragnajarian/experiment_files/run_interp.job $1
+# # Cross-section
+# sbatch /home/hragnajarian/experiment_files/run_cross_section.job $1

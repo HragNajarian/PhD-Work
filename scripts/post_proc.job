@@ -9,7 +9,9 @@
 #SBATCH -t 60:00:00 # max job run time HH:MM:SS
 
 # V2
-# When you run this slurm job, make your arguement the path to the raw directory that you want to run ncrcat
-ncrcat $1/wrfout_d01* $1/d01
-ncrcat $1/wrfout_d02* $1/d02
+
+# When you run this slurm job, make your arguement the parent dir that you want to run ncrcat 
+	# (folder that has sub_dirs of raw, L1, L2, and L3)
+ncrcat $1/raw/wrfout_d01* $1/raw/d01
+ncrcat $1/raw/wrfout_d02* $1/raw/d02
 
