@@ -1,17 +1,22 @@
 #!/bin/bash
+#SBATCH --job-name=concat
+#SBATCH --dependency=afterok:17468729
 #SBATCH -p radclouds
 #SBATCH -N 1
 #SBATCH -n 56
-#SBATCH --nodelist=c874
+#SBATCH --nodelist=c875
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
-#SBATCH -t 60:00:00 # max job run time HH:MM:SS
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
 
 # V2
-
-# When you run this slurm job, make your arguement the parent dir that you want to run ncrcat 
-	# (folder that has sub_dirs of raw, L1, L2, and L3)
-ncrcat $1/raw/wrfout_d01* $1/raw/d01
-ncrcat $1/raw/wrfout_d02* $1/raw/d02
-
+# When you run this slurm job, submit the job with an arguement that is equalt to
+	# the parent dir that you want to run ncrcat (folder that has sub_dirs of raw, L1, L2, and L3)
+# If there exists a concat version of d02, that means you can skip this post-processing step!
+if [ -e "$1/raw/d02" ]; then
+	echo "Concat files already exist, moving on."
+else
+	ncrcat $1/raw/wrfout_d01* $1/raw/d01
+	ncrcat $1/raw/wrfout_d02* $1/raw/d02
+fi
