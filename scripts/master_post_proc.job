@@ -8,7 +8,7 @@
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
-#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+#SBATCH -t 1:00:00 # max job run time HH:MM:SS
 
 # IMPORTANT: This .job must be read with an argument ($1) that is equal to the parent directory of the respective simulation.
 
@@ -21,17 +21,17 @@ echo "post_proc Job ID: ${job_post_proc_id}"
 # Extract
 sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_post_proc_id}" "/home/hragnajarian/PhD/scripts/run_extract.job"
 export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" $1|tr -d -c 0-9)
-echo "post_proc Job ID: ${job_run_extract_id}"
+echo "extract Job ID: ${job_run_extract_id}"
 
 # Interpolate
 sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_interp.job"
 export job_run_interp_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_interp.job" $1|tr -d -c 0-9)
-echo "post_proc Job ID: ${job_run_interp_id}"
+echo "interp Job ID: ${job_run_interp_id}"
 
 # Cross-section
 sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
-echo "post_proc Job ID: ${job_run_cross_section_id}"
+echo "cross Job ID: ${job_run_cross_section_id}"
 
 # Old version (doesn't work because it doesn't have dependencies)
 # # Concat
