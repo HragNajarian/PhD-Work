@@ -1,4 +1,6 @@
 #!/bin/bash
+#SBATCH --job-name=job_real
+#SBATCH --dependency=afterok:17468405
 #SBATCH -p radclouds
 #SBATCH -N 1
 #SBATCH -n 56
@@ -8,10 +10,9 @@
 #SBATCH --error=outbatch.err%j.txt
 #SBATCH -t 24:00:00 # max job run time HH:MM:SS
 
+cp $1 $2	# Update the namelist.input
 
 module purge
 source bashrc_wrf
 
-
 mpirun ./real.exe
-

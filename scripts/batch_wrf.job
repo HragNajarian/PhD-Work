@@ -1,4 +1,6 @@
 #!/bin/bash
+#SBATCH --job-name=job_wrf
+#SBATCH --dependency=afterok:17468407
 #SBATCH -p radclouds
 #SBATCH -N 6
 #SBATCH -n 336
@@ -6,7 +8,7 @@
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
-#SBATCH -t 60:00:00 # max job run time HH:MM:SS
+#SBATCH -t 96:00:00 # max job run time HH:MM:SS
 
 # Notes
 	# 10.5 day simulation with 4x daily restart file output at d01 500x400 d02 1300x1000, w/ 55 vertical layers took 51hrs running with 6 nodes
@@ -17,3 +19,4 @@ echo "+:h:0:RTHRATSW,RTHRATLW,RTHRATSWC,RTHRATLWC,H_DIABATIC" > var_extra_output
 
 mpirun ./wrf.exe
 
+mv $1 $2	# Move the wrfoutfiles to the specific directories
