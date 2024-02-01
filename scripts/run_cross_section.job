@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=cross
 #SBATCH -p radclouds
-#SBATCH --dependency=afterok:17475561
+#SBATCH --dependency=afterok:17476572
 #SBATCH -N 1
 #SBATCH -n 64
-#SBATCH --nodelist=c874
+#SBATCH --nodelist=c965,c966
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt

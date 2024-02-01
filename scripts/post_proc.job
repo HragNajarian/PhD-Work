@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=concat
-#SBATCH --dependency=afterok:17468729
+##SBATCH --dependency
 #SBATCH -p radclouds
 #SBATCH -N 1
-#SBATCH -n 56
-#SBATCH --nodelist=c875
+#SBATCH -n 64
+#SBATCH --nodelist=c965,c966
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
