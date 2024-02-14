@@ -22,6 +22,7 @@
     # variable_name: A list of variables that you are interested in calculating
         # U == Zonal wind                               [m/s]
         # V == Meridional wind                          [m/s]
+        # W == Vertical wind                            [m/s]
 		# QV == Water vapor mixing ratio 				[kg/kg]
 		# QC == Cloud water mixing ratio 				[kg/kg]
 		# QR == Rain water mixing ratio 				[kg/kg]
@@ -134,6 +135,35 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
                 variable = wrf.getvar(dataset, 'va', timeidx=t, meta=False)
+                variable.set_fill_value(wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable, P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                output_variable[t,...] = interp_variable[:]
+            # Make sure you close the input and output files at the end
+            output_dataset.close()
+
+        # Vertical Wind [m/s]
+        if i == 'W':
+            # Create new .nc file we can write to and name it appropriately
+            if levels == 1:
+                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'W' + str(vertical_levels), 'w', clobber=True)
+            else:
+                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_W', 'w', clobber=True)
+            output_dataset.setncatts(dataset.__dict__)
+            # Create the dimensions based on global dimensions, with exception to bottom_top
+            for dim_name, dim in dataset.dimensions.items():
+                if dim_name == 'bottom_top':    output_dataset.createDimension(dim_name, levels)
+                else:   output_dataset.createDimension(dim_name, len(dim))
+            # Create the variable, set attributes, and start filling the variable into the new nc file
+            output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QVAPOR'].dimensions)  # 'f4' == float32, 'QVAPOR' because 'V' is staggered
+            temp_atts = dataset.variables['W'].__dict__
+            temp_atts.update({'stagger': '','coordinates': 'XLONG XLAT XTIME'})
+            output_variable.setncatts(temp_atts)
+            # Make sure the fill value is consistent as you move forward
+                # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
+                # wrf.interp => 'f8' fill value (64-bit float)
+                # default netCDF4 => 'f4' fill value (32-bit float)
+            for t in range(dataset.dimensions['Time'].size):
+                variable = wrf.getvar(dataset, 'wa', timeidx=t, meta=False)
                 variable.set_fill_value(wrf.default_fill(np.float32))
                 interp_variable = wrf.interplevel(variable, P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
@@ -519,7 +549,8 @@ pressure_file_d02 = parent_dir + '/L1/d02_P'
 # Output to level 2 directory:
 output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
-variable_name = ['U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+variable_name = ['W']
 
 # Declare the vertial levels you want to interpolate:
 # vertical_levels = np.array(1000)
