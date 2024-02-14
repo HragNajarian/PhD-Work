@@ -15,7 +15,7 @@
         # create a variable specific .nc file from it.
 
 # Input:
-    # input_file: The stitched WRFout file path. This can be done through the 'ncrcat' function
+	# input_file: The stitched WRFout file path. This can be done through the 'ncrcat' function
     # variable_name: A list of variables that you are interested in calculating
 			# 3D variables
 		# P == Pressure 		[hPa]
@@ -729,13 +729,6 @@ parent_dir = sys.argv[1]
 # Control where icloud=1
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
 
-# Tests where icloud=0
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-03--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-06--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-09--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-12--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-15--11-26-12'
-
 # Pick the raw folders:
 input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
 input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
@@ -743,8 +736,8 @@ input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-variable_name = ['P', 'PSFC', 'RR', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-# variable_name = ['LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+# variable_name = ['P', 'PSFC', 'RR', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['']
 
 # Call on your function:
 extract_variable(input_file_d01, variable_name, output_dir)
