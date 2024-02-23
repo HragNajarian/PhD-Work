@@ -31,11 +31,13 @@
 		# QG == Graupel mixing ratio 					[kg/kg]
         # CLDFRA == Cloud Fraction                      [0-1]
 		# Theta == Potential Temperature                [K]
-		# H_DIABATIC == Microphysics Latent heating 	[K/s]
-		# RTHRATSWC == SW Radiative heating CLEAR SKY 	[K/s]
-		# RTHRATSW == SW Radiative heating 				[K/s]
-		# RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
-		# RTHRATLW == LW Radiative heating 				[K/s]
+		# LH / H_DIABATIC == Microphysics Latent heating[K/s]
+		# SWClear / RTHRATSWC == SW Radiative heating CLEAR SKY 	[K/s]
+		# SWAll / RTHRATSW == SW Radiative heating 				    [K/s]
+		# LWClear / RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
+		# LWAll / RTHRATLW == LW Radiative heating 				    [K/s]
+
+
     # output_dir: The path to a directory where you'd like the new .nc files to be located
     # vertical_levels: An np.array() of pressure level(s) (in hPa) to interpolate
 # Output:
@@ -550,7 +552,7 @@ pressure_file_d02 = parent_dir + '/L1/d02_P'
 output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
 # variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-variable_name = ['W']
+variable_name = ['']
 
 # Declare the vertial levels you want to interpolate:
 # vertical_levels = np.array(1000)

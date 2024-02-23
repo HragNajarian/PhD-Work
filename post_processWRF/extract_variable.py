@@ -35,11 +35,12 @@
 		# RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
 		# RTHRATLW == LW Radiative heating 				[K/s]
 			# 2D variables
-        # RR == Rain rate 				[mm/dt], where dt is your timestep
-		# T2 == Temperature at 2m 		[K]
-		# U10 == Zonal wind at 10m 		[m/s]
-		# V10 == Meridonal wind at 10m 	[m/s]
-		# PSFC == Pressure at surface 	[hPa]
+        # RR == Rain rate 						[mm/dt], where dt is your timestep
+        # HFX == Upward Heat Flux at Surface	[W/m^2]
+		# T2 == Temperature at 2m 				[K]
+		# U10 == Zonal wind at 10m 				[m/s]
+		# V10 == Meridonal wind at 10m 			[m/s]
+		# PSFC == Pressure at surface 			[hPa]
 			# All sky
 		# LWUPT == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP , [W/m^2]
 		# LWDNT == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP , [W/m^2]
@@ -385,6 +386,22 @@ def extract_variable(input_file, variable_name, output_dir):
 			output_variable = output_dataset.createVariable(i, variable.dtype, R_accum.dimensions)
 			temp_atts = R_accum.__dict__
 			temp_atts.update({'description':'Rain Rate', 'units':'mm/dt'})
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
+		# Upward Heat Flux at Surface (W/m^2)
+		elif i == 'HFX':
+			variable = dataset.variables['HFX']	# [W/m^2]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_HFX', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
 			output_variable.setncatts(temp_atts)
 			output_variable[:] = variable[:]	# not a large variable so no need to loop
 			output_dataset.close()
@@ -735,8 +752,8 @@ input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX' 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
 variable_name = ['']
 
 # Call on your function:
