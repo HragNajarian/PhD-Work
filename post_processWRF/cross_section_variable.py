@@ -153,12 +153,12 @@ def dist(lat1, lon1, lat2, lon2):
 
 def rotate_vec(da_x, da_y, theta):
 	# anti-clockwise rotation
-	if theta > 0:
+	if (theta > 0) & (theta<pi/2):
 		da_x_rot = da_x*cos(theta) + da_y*cos((pi/2)-theta)
-		da_y_rot = da_x*cos((pi/2)-theta) + da_y*cos(theta)
+		da_y_rot = -da_x*cos((pi/2)-theta) + da_y*cos(theta)
 	# clockwise rotation
-	if theta < 0:
-		da_x_rot = da_x*cos(-theta) + da_y*cos((pi/2)+theta)
+	if (theta < 0) & (theta>(-pi/2)):
+		da_x_rot = da_x*cos(-theta) - da_y*cos((pi/2)+theta)
 		da_y_rot = da_x*cos((pi/2)+theta) + da_y*cos(-theta)
 
 	return da_x_rot, da_y_rot
