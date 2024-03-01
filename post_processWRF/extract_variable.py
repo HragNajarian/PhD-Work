@@ -37,6 +37,8 @@
 			# 2D variables
         # RR == Rain rate 						[mm/dt], where dt is your timestep
         # HFX == Upward Heat Flux at Surface	[W/m^2]
+		# QFX == Upward Moisture Flux at Surface[kg/(m^2s^1)]
+		# LH == Latent Heat Flux at Surface		[W/m^2]
 		# T2 == Temperature at 2m 				[K]
 		# U10 == Zonal wind at 10m 				[m/s]
 		# V10 == Meridonal wind at 10m 			[m/s]
@@ -289,7 +291,7 @@ def extract_variable(input_file, variable_name, output_dir):
 			output_dataset.close()
 
 		# Latent Heating [K/s]
-		elif i == 'LH':
+		elif i == 'H_DIABATIC':
 			variable = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LH', 'w', clobber=True)
@@ -395,6 +397,38 @@ def extract_variable(input_file, variable_name, output_dir):
 			variable = dataset.variables['HFX']	# [W/m^2]
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_HFX', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
+		# Upward Moisture Flux at Surface[kg/(m^2s^1)]
+		elif i == 'QFX':
+			variable = dataset.variables['QFX']	# [kg/(m^2s^1)]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QFX', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
+		# Latent Heat Flux at Surface		[W/m^2]
+		elif i == 'LH':
+			variable = dataset.variables['LH']	# [W/m^2]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LH', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -752,9 +786,9 @@ input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX' 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['']
+# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['QFX', 'LH']
 
 # Call on your function:
 extract_variable(input_file_d01, variable_name, output_dir)
