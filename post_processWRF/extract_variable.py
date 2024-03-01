@@ -294,7 +294,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'H_DIABATIC':
 			variable = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LH', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_H_DIABATIC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():

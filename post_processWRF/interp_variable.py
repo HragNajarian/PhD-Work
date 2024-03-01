@@ -31,7 +31,7 @@
 		# QG == Graupel mixing ratio 					[kg/kg]
         # CLDFRA == Cloud Fraction                      [0-1]
 		# Theta == Potential Temperature                [K]
-		# LH / H_DIABATIC == Microphysics Latent heating[K/s]
+		# H_DIABATIC == Microphysics Latent heating     [K/s]
 		# SWClear / RTHRATSWC == SW Radiative heating CLEAR SKY 	[K/s]
 		# SWAll / RTHRATSW == SW Radiative heating 				    [K/s]
 		# LWClear / RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
@@ -389,12 +389,12 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_dataset.close()
 
         # Latent Heating [K/s]
-        elif i == 'LH':
+        elif i == 'H_DIABATIC':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'LH' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'H_DIABATIC' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_LH', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_H_DIABATIC', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -404,13 +404,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['H_DIABATIC'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['H_DIABATIC'].__dict__)
             # Dataset variable to read from
-            LH = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
+            H_DIABATIC = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(LH[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(H_DIABATIC[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -550,8 +550,8 @@ pressure_file_d02 = parent_dir + '/L1/d02_P'
 
 # Output to level 2 directory:
 output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
-# Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
-# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'LH', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+# Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
+# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
 variable_name = ['']
 
 # Declare the vertial levels you want to interpolate:
