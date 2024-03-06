@@ -289,6 +289,7 @@ def cross_section_multi(da, start_coord, end_coord, width, dx):
 parent_dir = sys.argv[1]
 os.chdir(parent_dir+'/L3/Sumatra_mid_central')
 
+
 # # Control
 # os.chdir('/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/L3')
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
@@ -301,6 +302,11 @@ file_d01_RR = parent_dir + '/L1/d01_RR'						# [mm/dt]
 file_d02_RR = parent_dir + '/L1/d02_RR'						# [mm/dt]
 file_d01_HFX = parent_dir + '/L1/d01_HFX'					# [W/m^2]
 file_d02_HFX = parent_dir + '/L1/d02_HFX'					# [W/m^2]
+file_d01_QFX = parent_dir + '/L1/d01_QFX'					# [W/m^2]
+file_d02_QFX = parent_dir + '/L1/d02_QFX'					# [W/m^2]
+file_d01_LH = parent_dir + '/L1/d01_LH'					    # [kg/(m^2s^1)]
+file_d02_LH = parent_dir + '/L1/d02_LH'					    # [kg/(m^2s^1)]
+
 # All-sky
 file_d01_LWUPT = parent_dir + '/L1/d01_LWUPT'				# [W/m^2]
 file_d02_LWUPT = parent_dir + '/L1/d02_LWUPT'				# [W/m^2]
@@ -357,8 +363,8 @@ file_d01_QG = parent_dir + '/L2/d01_interp_QG'	        # [kg/kg]
 file_d02_QG = parent_dir + '/L2/d02_interp_QG'	        # [kg/kg]
 file_d01_CLDFRA = parent_dir + '/L2/d01_interp_CLDFRA'	# 
 file_d02_CLDFRA = parent_dir + '/L2/d02_interp_CLDFRA'	# 
-file_d01_LH = parent_dir + '/L2/d01_interp_LH'	        # [K/s]
-file_d02_LH = parent_dir + '/L2/d02_interp_LH'	        # [K/s]
+file_d01_H_DIABATIC = parent_dir + '/L2/d01_interp_H_DIABATIC'	        # [K/s]
+file_d02_H_DIABATIC = parent_dir + '/L2/d02_interp_H_DIABATIC'	        # [K/s]
 file_d01_LWAll = parent_dir + '/L2/d01_interp_LWAll'	# [K/s]
 file_d02_LWAll = parent_dir + '/L2/d02_interp_LWAll'	# [K/s]
 file_d01_LWClear = parent_dir + '/L2/d01_interp_LWClear'# [K/s]
@@ -438,7 +444,7 @@ width			= 1.5
 dx 				= 0.025
 theta           = pi/4
 
-##################### 3-D variables #######################
+# ##################### 3-D variables #######################
 
 ############ Interpolated zonal winds   [m/s] #############
 step2_time = time.perf_counter()
@@ -447,59 +453,59 @@ ds = open_ds(file_d01_U,time_ind_d01,lat_ind_d01,lon_ind_d01)
 da_d01_U = ds['U'].compute()
 da_d01_U = da_d01_U.assign_coords(d01_coords)
 fill_value_f8 = da_d01_U.max()      # This is the fill_value meaning missing_data
-da_d01_U = da_d01_U.where(da_d01_U!=fill_value_f8)    # Change fill_value points to nans
-# d02
-ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
-da_d02_U = ds['U'].compute()
-da_d02_U = da_d02_U.assign_coords(d02_coords)
-da_d02_U = da_d02_U.where(da_d02_U!=fill_value_f8)    # Change fill_value points to nans
+# da_d01_U = da_d01_U.where(da_d01_U!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_U = ds['U'].compute()
+# da_d02_U = da_d02_U.assign_coords(d02_coords)
+# da_d02_U = da_d02_U.where(da_d02_U!=fill_value_f8)    # Change fill_value points to nans
 
-step1_time = time.perf_counter()
-print('Interpolated zonal winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+# step1_time = time.perf_counter()
+# print('Interpolated zonal winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
-############ Interpolated Meridional winds   [m/s] ############
-step2_time = time.perf_counter()
-# d01
-ds = open_ds(file_d01_V,time_ind_d01,lat_ind_d01,lon_ind_d01)
-da_d01_V = ds['V'].compute()
-da_d01_V = da_d01_V.assign_coords(d01_coords)
-da_d01_V = da_d01_V.where(da_d01_V!=fill_value_f8)    # Change fill_value points to nans
-# d02
-ds = open_ds(file_d02_V,time_ind_d02,lat_ind_d02,lon_ind_d02)
-da_d02_V = ds['V'].compute()
-da_d02_V = da_d02_V.assign_coords(d02_coords)
-da_d02_V = da_d02_V.where(da_d02_V!=fill_value_f8)    # Change fill_value points to nans
+# ############ Interpolated Meridional winds   [m/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_V,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_V = ds['V'].compute()
+# da_d01_V = da_d01_V.assign_coords(d01_coords)
+# da_d01_V = da_d01_V.where(da_d01_V!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_V,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_V = ds['V'].compute()
+# da_d02_V = da_d02_V.assign_coords(d02_coords)
+# da_d02_V = da_d02_V.where(da_d02_V!=fill_value_f8)    # Change fill_value points to nans
 
-step1_time = time.perf_counter()
-print('Interpolated meridional winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+# step1_time = time.perf_counter()
+# print('Interpolated meridional winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
-################################ Calculate Normal Wind ################################
-## d01
-# Rotate the coordinate system w.r.t Sumatra's angle
-da_u, da_v = rotate_vec(da_d01_U, da_d01_V, theta)
-################ Normal Wind - Cross-section Analysis ################
-da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
-# Create distance coordinate
-distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[2])
-# Mannually checked which indicies were closest to the coast for d01 (where nan's end)
-distance_d01 = distance - distance[16]
-# Create da with coordinates
-da_d01_NormalWind_cross = make_da_cross(da_d01_U, da_cross_temp, 'NormalWind', distance_d01, width, all_line_coords)
-da_d01_NormalWind_cross.to_netcdf('./d01_cross_NormalWind')
+# ################################ Calculate Normal Wind ################################
+# ## d01
+# # Rotate the coordinate system w.r.t Sumatra's angle
+# da_u, da_v = rotate_vec(da_d01_U, da_d01_V, theta)
+# ################ Normal Wind - Cross-section Analysis ################
+# da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
+# # Create distance coordinate
+# distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[2])
+# # Mannually checked which indicies were closest to the coast for d01 (where nan's end)
+# distance_d01 = distance - distance[16]
+# # Create da with coordinates
+# da_d01_NormalWind_cross = make_da_cross(da_d01_U, da_cross_temp, 'NormalWind', distance_d01, width, all_line_coords)
+# da_d01_NormalWind_cross.to_netcdf('./d01_cross_NormalWind')
 
-# d02
-da_u, da_v = rotate_vec(da_d02_U, da_d02_V, theta)
-################ Normal Wind - Cross-section Analysis ################
-da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
-#Create distance coordinate
-distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[2])
-# Mannually checked which indicies were closest to the coast for d02 (where nan's end)
-distance_d02 = distance - distance[63]
-# Create da with coordinates
-da_d02_NormalWind_cross = make_da_cross(da_d02_U, da_cross_temp, 'NormalWind', distance_d02, width, all_line_coords)
-da_d02_NormalWind_cross.to_netcdf('./d02_cross_NormalWind')
-# Delete variables after to aliviate memory strain
-del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U, da_d01_V, da_d02_U, da_d02_V
+# # d02
+# da_u, da_v = rotate_vec(da_d02_U, da_d02_V, theta)
+# ################ Normal Wind - Cross-section Analysis ################
+# da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
+# # Create distance coordinate
+# distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[2])
+# # Mannually checked which indicies were closest to the coast for d02 (where nan's end)
+# distance_d02 = distance - distance[63]
+# # Create da with coordinates
+# da_d02_NormalWind_cross = make_da_cross(da_d02_U, da_cross_temp, 'NormalWind', distance_d02, width, all_line_coords)
+# da_d02_NormalWind_cross.to_netcdf('./d02_cross_NormalWind')
+# # Delete variables after to aliviate memory strain
+# del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U, da_d01_V, da_d02_U, da_d02_V
 
 # ############ Interpolated Vertical winds   [m/s] ############
 # step2_time = time.perf_counter()
@@ -744,32 +750,32 @@ del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U, da_d01_V, da_d02
 # ############ Latent Heating [K/s] ############
 # step2_time = time.perf_counter()
 # # d01
-# ds = open_ds(file_d01_LH,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LH = ds['LH'].compute()
-# da_d01_LH = da_d01_LH.assign_coords(d01_coords)
-# da_d01_LH = da_d01_LH.where(da_d01_LH!=fill_value_f8)    # Change fill_value points to nans
+# ds = open_ds(file_d01_H_DIABATIC,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_H_DIABATIC = ds['H_DIABATIC'].compute()
+# da_d01_H_DIABATIC = da_d01_H_DIABATIC.assign_coords(d01_coords)
+# da_d01_H_DIABATIC = da_d01_H_DIABATIC.where(da_d01_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
 # # d02
-# ds = open_ds(file_d02_LH,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LH = ds['LH'].compute()
-# da_d02_LH = da_d02_LH.assign_coords(d02_coords)
-# da_d02_LH = da_d02_LH.where(da_d02_LH!=fill_value_f8)    # Change fill_value points to nans
+# ds = open_ds(file_d02_H_DIABATIC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_H_DIABATIC = ds['H_DIABATIC'].compute()
+# da_d02_H_DIABATIC = da_d02_H_DIABATIC.assign_coords(d02_coords)
+# da_d02_H_DIABATIC = da_d02_H_DIABATIC.where(da_d02_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
 
 # step1_time = time.perf_counter()
 # print('Latent heating loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
 # ################ Latent Heat - Cross-section Analysis ################
 # # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LH, start_coord, end_coord, width, dx)
+# da_cross_temp, all_line_coords = cross_section_multi(da_d01_H_DIABATIC, start_coord, end_coord, width, dx)
 # # Create da with coordinates
-# da_d01_LH_cross = make_da_cross(da_d01_LH, da_cross_temp, 'LH', distance_d01, width, all_line_coords)
-# da_d01_LH_cross.to_netcdf('./d01_cross_LH')
+# da_d01_H_DIABATIC_cross = make_da_cross(da_d01_H_DIABATIC, da_cross_temp, 'H_DIABATIC', distance_d01, width, all_line_coords)
+# da_d01_H_DIABATIC_cross.to_netcdf('./d01_cross_H_DIABATIC')
 # # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LH, start_coord, end_coord, width, dx)
+# da_cross_temp, all_line_coords = cross_section_multi(da_d02_H_DIABATIC, start_coord, end_coord, width, dx)
 # # Create da with coordinates
-# da_d02_LH_cross = make_da_cross(da_d02_LH, da_cross_temp, 'LH', distance_d02, width, all_line_coords)
-# da_d02_LH_cross.to_netcdf('./d02_cross_LH')
+# da_d02_H_DIABATIC_cross = make_da_cross(da_d02_H_DIABATIC, da_cross_temp, 'H_DIABATIC', distance_d02, width, all_line_coords)
+# da_d02_H_DIABATIC_cross.to_netcdf('./d02_cross_H_DIABATIC')
 # # Delete variables after to aliviate memory strain
-# del da_d01_LH_cross, da_d02_LH_cross, da_d01_LH, da_d02_LH
+# del da_d01_H_DIABATIC_cross, da_d02_H_DIABATIC_cross, da_d01_H_DIABATIC, da_d02_H_DIABATIC
 
 # ############ Potential Temperature [K] ############
 # step2_time = time.perf_counter()
@@ -1008,8 +1014,6 @@ del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U, da_d01_V, da_d02
 # ################ Upward Heat Flux at Surface - Cross-section Analysis #################
 # # d01
 # da_cross_temp, all_line_coords = cross_section_multi(da_d01_HFX, start_coord, end_coord, width, dx)
-# da_cross_temp.shape
-
 # # Create distance coordinate
 # distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
 # # Mannually checked which indicies were closest to the coast for d01 (where nan's end)
@@ -1028,6 +1032,84 @@ del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U, da_d01_V, da_d02
 # da_d02_HFX_cross.to_netcdf('./d02_cross_HFX')
 # # Delete variables after to aliviate memory strain
 # del da_d01_HFX, da_d02_HFX, da_d01_HFX_cross, da_d02_HFX_cross
+
+
+############ Upward Moisture Flux at Surface     [kg/(m^2s^1)] ############
+step2_time = time.perf_counter()
+# d01
+ds = open_ds(file_d01_QFX,time_ind_d01,lat_ind_d01,lon_ind_d01)
+da_d01_QFX = ds['QFX'].compute()
+da_d01_QFX = da_d01_QFX.assign_coords(without_keys(d01_coords,'bottom_top'))
+da_d01_QFX = da_d01_QFX.where(da_d01_QFX!=fill_value_f8)    # Change fill_value points to nans
+# d02
+ds = open_ds(file_d02_QFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_QFX = ds['QFX'].compute()
+da_d02_QFX = da_d02_QFX.assign_coords(without_keys(d02_coords,'bottom_top'))
+da_d02_QFX = da_d02_QFX.where(da_d02_QFX!=fill_value_f8)    # Change fill_value points to nans
+
+step1_time = time.perf_counter()
+print('Upward Moisture Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+################ Upward Moisture Flux at Surface - Cross-section Analysis #################
+# d01
+da_cross_temp, all_line_coords = cross_section_multi(da_d01_QFX, start_coord, end_coord, width, dx)
+# Create distance coordinate
+distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# Mannually checked which indicies were closest to the coast for d01 (where nan's end)
+distance_d01 = distance - distance[16]
+# Create da with coordinates
+da_d01_QFX_cross = make_da_cross(da_d01_QFX, da_cross_temp, 'QFX', distance_d01, width, all_line_coords)
+da_d01_QFX_cross.to_netcdf('./d01_cross_QFX')
+# d02
+da_cross_temp, all_line_coords = cross_section_multi(da_d02_QFX, start_coord, end_coord, width, dx)
+# Create distance coordinate
+distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# Mannually checked which indicies were closest to the coast for d02 (where nan's end)
+distance_d02 = distance - distance[63]
+# Create da with coordinates
+da_d02_QFX_cross = make_da_cross(da_d02_QFX, da_cross_temp, 'QFX', distance_d02, width, all_line_coords)
+da_d02_QFX_cross.to_netcdf('./d02_cross_QFX')
+# Delete variables after to aliviate memory strain
+del da_d01_QFX, da_d02_QFX, da_d01_QFX_cross, da_d02_QFX_cross
+
+
+############ Latent Heat Flux at Surface		[W/m^2] ############
+step2_time = time.perf_counter()
+# d01
+ds = open_ds(file_d01_LH,time_ind_d01,lat_ind_d01,lon_ind_d01)
+da_d01_LH = ds['LH'].compute()
+da_d01_LH = da_d01_LH.assign_coords(without_keys(d01_coords,'bottom_top'))
+da_d01_LH = da_d01_LH.where(da_d01_LH!=fill_value_f8)    # Change fill_value points to nans
+# d02
+ds = open_ds(file_d02_LH,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_LH = ds['LH'].compute()
+da_d02_LH = da_d02_LH.assign_coords(without_keys(d02_coords,'bottom_top'))
+da_d02_LH = da_d02_LH.where(da_d02_LH!=fill_value_f8)    # Change fill_value points to nans
+
+step1_time = time.perf_counter()
+print('Latent Heat Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+################ Latent Heat Flux at Surface - Cross-section Analysis #################
+# d01
+da_cross_temp, all_line_coords = cross_section_multi(da_d01_LH, start_coord, end_coord, width, dx)
+# Create distance coordinate
+distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# Mannually checked which indicies were closest to the coast for d01 (where nan's end)
+distance_d01 = distance - distance[16]
+# Create da with coordinates
+da_d01_LH_cross = make_da_cross(da_d01_LH, da_cross_temp, 'LH', distance_d01, width, all_line_coords)
+da_d01_LH_cross.to_netcdf('./d01_cross_LH')
+# d02
+da_cross_temp, all_line_coords = cross_section_multi(da_d02_LH, start_coord, end_coord, width, dx)
+# Create distance coordinate
+distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# Mannually checked which indicies were closest to the coast for d02 (where nan's end)
+distance_d02 = distance - distance[63]
+# Create da with coordinates
+da_d02_LH_cross = make_da_cross(da_d02_LH, da_cross_temp, 'LH', distance_d02, width, all_line_coords)
+da_d02_LH_cross.to_netcdf('./d02_cross_LH')
+# Delete variables after to aliviate memory strain
+del da_d01_LH, da_d02_LH, da_d01_LH_cross, da_d02_LH_cross
 
 # ###########################################################################
 # ################################# All-sky #################################

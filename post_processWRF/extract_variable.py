@@ -788,7 +788,7 @@ input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['QFX', 'LH']
+variable_name = ['H_DIABATIC']
 
 # Call on your function:
 extract_variable(input_file_d01, variable_name, output_dir)

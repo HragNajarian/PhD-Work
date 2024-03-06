@@ -552,7 +552,7 @@ pressure_file_d02 = parent_dir + '/L1/d02_P'
 output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
 # variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-variable_name = ['']
+variable_name = []
 
 # Declare the vertial levels you want to interpolate:
 # vertical_levels = np.array(1000)
