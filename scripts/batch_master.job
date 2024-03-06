@@ -16,8 +16,9 @@ parent_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian
 # Declare the WRF/run dir:
 wrf_run_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfstuff/WRF/run"
 
-# List all the directories that have been made via mkdir_and_subdirectories.py
-directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -type d | sort))
+# List all the directories that have been made via mkdir_and_subdirectories.py. Name option acts as a pattern recognizer
+directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -name "2015*" -type d | sort))
+
 # Declare a counter. This acts as a condition for batch_real.job.
 counter=0
 for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loops through directories)
