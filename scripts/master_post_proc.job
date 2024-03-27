@@ -34,7 +34,7 @@
 # export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
 # echo "cross Job ID: ${job_run_cross_section_id}"
 
-############ If you want to JUST run post-processing, uncomment this section and comment out the previous section ############
+############ If you want to JUST run post-processing, uncomment the section below and comment out the previous section ############
 
 # Declare the parent dir:
 	# This is where you would keep all the directories where the simulations directories are held.
@@ -48,10 +48,10 @@ for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loo
 	echo "This is the counter: ${counter}"
 	echo "This is the current processing directory: ${dir}"
 
-	# Extract job -> Cross job
-		# Step 1, run run_extract.job and capture the JobID
-	export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
-	echo "extract Job ID: ${job_run_extract_id}"
+	# # Extract job -> Cross job
+	# 	# Step 1, run run_extract.job and capture the JobID
+	# export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
+	# echo "extract Job ID: ${job_run_extract_id}"
 
 
 	# # Interp job -> Cross job
@@ -61,7 +61,7 @@ for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loo
 
 
 	# Step 2, set a dependency for run_cross_section.job where it only runs once run_interp.job OR run_extract.job is completed.
-	sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
+	# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 	# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 
 	# Step 3, run run_cross_section.job and capture the JobID
@@ -74,7 +74,7 @@ done
 
 
 
-# Old version (doesn't work because it doesn't have dependencies)
+# Old version (doesn't work because it doesn't set dependencies)
 # # Concat
 # sbatch /home/hragnajarian/experiment_files/post_proc.job $1
 # # Extract
