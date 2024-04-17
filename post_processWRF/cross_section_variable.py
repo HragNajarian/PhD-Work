@@ -289,17 +289,15 @@ def cross_section_multi(da, start_coord, end_coord, width, dx):
 parent_dir = sys.argv[1]
 os.chdir(parent_dir+'/L3/Sumatra_mid_central')
 
-
-# # Control
-# os.chdir('/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/L3')
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
-
+# Raw dataset
 file_d01_raw = parent_dir + '/raw/d01'
 file_d02_raw = parent_dir + '/raw/d02'
 
 # 2-D data
 file_d01_RR = parent_dir + '/L1/d01_RR'						# [mm/dt]
 file_d02_RR = parent_dir + '/L1/d02_RR'						# [mm/dt]
+file_d01_PSFC = parent_dir + '/L1/d01_PSFC'					# [hPa]
+file_d02_PSFC = parent_dir + '/L1/d02_PSFC'					# [hPa]
 file_d01_T2 = parent_dir + '/L1/d01_T2'						# [K]
 file_d02_T2 = parent_dir + '/L1/d02_T2'						# [K]
 file_d01_HFX = parent_dir + '/L1/d01_HFX'					# [W/m^2]
@@ -308,6 +306,10 @@ file_d01_QFX = parent_dir + '/L1/d01_QFX'					# [W/m^2]
 file_d02_QFX = parent_dir + '/L1/d02_QFX'					# [W/m^2]
 file_d01_LH = parent_dir + '/L1/d01_LH'					    # [kg/(m^2s^1)]
 file_d02_LH = parent_dir + '/L1/d02_LH'					    # [kg/(m^2s^1)]
+file_d01_CAPE = parent_dir + '/L1/d01_CAPE'                 # [J/kg]
+file_d02_CAPE = parent_dir + '/L1/d02_CAPE'	                # [J/kg]
+file_d01_CIN = parent_dir + '/L1/d01_CIN'                   # [J/kg]
+file_d02_CIN = parent_dir + '/L1/d02_CIN'	                # [J/kg]
 
 # All-sky
 file_d01_LWUPT = parent_dir + '/L1/d01_LWUPT'				# [W/m^2]
@@ -996,6 +998,7 @@ fill_value_f8 = da_d01_U.max()      # This is the fill_value meaning missing_dat
 # # Delete variables after to aliviate memory strain
 # del da_d01_RR, da_d02_RR, da_d01_RR_cross, da_d02_RR_cross
 
+
 # ############ Upward Heat Flux at Surface     [W/m^2] ############
 # step2_time = time.perf_counter()
 # # d01
@@ -1011,7 +1014,6 @@ fill_value_f8 = da_d01_U.max()      # This is the fill_value meaning missing_dat
 
 # step1_time = time.perf_counter()
 # print('Upward Heat Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
 
 # ################ Upward Heat Flux at Surface - Cross-section Analysis #################
 # # d01
@@ -1114,45 +1116,160 @@ fill_value_f8 = da_d01_U.max()      # This is the fill_value meaning missing_dat
 # del da_d01_LH, da_d02_LH, da_d01_LH_cross, da_d02_LH_cross
 
 
-############ Temperature at 2m     [K] ############
+# ############ Temperature at 2m     [K] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_T2,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_T2 = ds['T2'].compute()
+# da_d01_T2 = da_d01_T2.assign_coords(without_keys(d01_coords,'bottom_top'))
+# da_d01_T2 = da_d01_T2.where(da_d01_T2!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_T2,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_T2 = ds['T2'].compute()
+# da_d02_T2 = da_d02_T2.assign_coords(without_keys(d02_coords,'bottom_top'))
+# da_d02_T2 = da_d02_T2.where(da_d02_T2!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Temperature at 2m loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ################ Temperature at 2m - Cross-section Analysis #################
+# # d01
+# da_cross_temp, all_line_coords = cross_section_multi(da_d01_T2, start_coord, end_coord, width, dx)
+# # Create distance coordinate
+# distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# # Mannually checked which indicies were closest to the coast for d01 (where nan's end)
+# distance_d01 = distance - distance[16]
+# # Create da with coordinates
+# da_d01_T2_cross = make_da_cross(da_d01_T2, da_cross_temp, 'T2', distance_d01, width, all_line_coords)
+# da_d01_T2_cross.to_netcdf('./d01_cross_T2')
+# # d02
+# da_cross_temp, all_line_coords = cross_section_multi(da_d02_T2, start_coord, end_coord, width, dx)
+# # Create distance coordinate
+# distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# # Mannually checked which indicies were closest to the coast for d02 (where nan's end)
+# distance_d02 = distance - distance[63]
+# # Create da with coordinates
+# da_d02_T2_cross = make_da_cross(da_d02_T2, da_cross_temp, 'T2', distance_d02, width, all_line_coords)
+# da_d02_T2_cross.to_netcdf('./d02_cross_T2')
+# # Delete variables after to aliviate memory strain
+# del da_d01_T2, da_d02_T2, da_d01_T2_cross, da_d02_T2_cross
+
+
+# ############ Surface Pressure     [hPa] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_PSFC,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_PSFC = ds['PSFC'].compute()
+# da_d01_PSFC = da_d01_PSFC.assign_coords(without_keys(d01_coords,'bottom_top'))
+# da_d01_PSFC = da_d01_PSFC.where(da_d01_PSFC!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_PSFC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_PSFC = ds['PSFC'].compute()
+# da_d02_PSFC = da_d02_PSFC.assign_coords(without_keys(d02_coords,'bottom_top'))
+# da_d02_PSFC = da_d02_PSFC.where(da_d02_PSFC!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Surface Pressure loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ################ Surface Pressure - Cross-section Analysis #################
+# # d01
+# da_cross_temp, all_line_coords = cross_section_multi(da_d01_PSFC, start_coord, end_coord, width, dx)
+# # Create distance coordinate
+# distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# # Mannually checked which indicies were closest to the coast for d01 (where nan's end)
+# distance_d01 = distance - distance[16]
+# # Create da with coordinates
+# da_d01_PSFC_cross = make_da_cross(da_d01_PSFC, da_cross_temp, 'PSFC', distance_d01, width, all_line_coords)
+# da_d01_PSFC_cross.to_netcdf('./d01_cross_PSFC')
+# # d02
+# da_cross_temp, all_line_coords = cross_section_multi(da_d02_PSFC, start_coord, end_coord, width, dx)
+# # Create distance coordinate
+# distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# # Mannually checked which indicies were closest to the coast for d02 (where nan's end)
+# distance_d02 = distance - distance[63]
+# # Create da with coordinates
+# da_d02_PSFC_cross = make_da_cross(da_d02_PSFC, da_cross_temp, 'PSFC', distance_d02, width, all_line_coords)
+# da_d02_PSFC_cross.to_netcdf('./d02_cross_PSFC')
+# # Delete variables after to aliviate memory strain
+# del da_d01_PSFC, da_d02_PSFC, da_d01_PSFC_cross, da_d02_PSFC_cross
+
+
+############ CAPE     [hPa] ############
 step2_time = time.perf_counter()
 # d01
-ds = open_ds(file_d01_T2,time_ind_d01,lat_ind_d01,lon_ind_d01)
-da_d01_T2 = ds['T2'].compute()
-da_d01_T2 = da_d01_T2.assign_coords(without_keys(d01_coords,'bottom_top'))
-da_d01_T2 = da_d01_T2.where(da_d01_T2!=fill_value_f8)    # Change fill_value points to nans
+ds = open_ds(file_d01_CAPE,time_ind_d01,lat_ind_d01,lon_ind_d01)
+da_d01_CAPE = ds['CAPE'].compute()
+da_d01_CAPE = da_d01_CAPE.assign_coords(without_keys(d01_coords,'bottom_top'))
+da_d01_CAPE = da_d01_CAPE.where(da_d01_CAPE!=fill_value_f8)    # Change fill_value points to nans
 # d02
-ds = open_ds(file_d02_T2,time_ind_d02,lat_ind_d02,lon_ind_d02)
-da_d02_T2 = ds['T2'].compute()
-da_d02_T2 = da_d02_T2.assign_coords(without_keys(d02_coords,'bottom_top'))
-da_d02_T2 = da_d02_T2.where(da_d02_T2!=fill_value_f8)    # Change fill_value points to nans
+ds = open_ds(file_d02_CAPE,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_CAPE = ds['CAPE'].compute()
+da_d02_CAPE = da_d02_CAPE.assign_coords(without_keys(d02_coords,'bottom_top'))
+da_d02_CAPE = da_d02_CAPE.where(da_d02_CAPE!=fill_value_f8)    # Change fill_value points to nans
 
 step1_time = time.perf_counter()
-print('Temperature at 2m loaded \N{check mark}', step1_time-step2_time, 'seconds')
+print('CAPE loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
-
-################ Temperature at 2m - Cross-section Analysis #################
+################ CAPE - Cross-section Analysis #################
 # d01
-da_cross_temp, all_line_coords = cross_section_multi(da_d01_T2, start_coord, end_coord, width, dx)
+da_cross_temp, all_line_coords = cross_section_multi(da_d01_CAPE, start_coord, end_coord, width, dx)
 # Create distance coordinate
 distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
 # Mannually checked which indicies were closest to the coast for d01 (where nan's end)
 distance_d01 = distance - distance[16]
 # Create da with coordinates
-da_d01_T2_cross = make_da_cross(da_d01_T2, da_cross_temp, 'T2', distance_d01, width, all_line_coords)
-da_d01_T2_cross.to_netcdf('./d01_cross_T2')
+da_d01_CAPE_cross = make_da_cross(da_d01_CAPE, da_cross_temp, 'CAPE', distance_d01, width, all_line_coords)
+da_d01_CAPE_cross.to_netcdf('./d01_cross_CAPE')
 # d02
-da_cross_temp, all_line_coords = cross_section_multi(da_d02_T2, start_coord, end_coord, width, dx)
+da_cross_temp, all_line_coords = cross_section_multi(da_d02_CAPE, start_coord, end_coord, width, dx)
 # Create distance coordinate
 distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
 # Mannually checked which indicies were closest to the coast for d02 (where nan's end)
 distance_d02 = distance - distance[63]
 # Create da with coordinates
-da_d02_T2_cross = make_da_cross(da_d02_T2, da_cross_temp, 'T2', distance_d02, width, all_line_coords)
-da_d02_T2_cross.to_netcdf('./d02_cross_T2')
+da_d02_CAPE_cross = make_da_cross(da_d02_CAPE, da_cross_temp, 'CAPE', distance_d02, width, all_line_coords)
+da_d02_CAPE_cross.to_netcdf('./d02_cross_CAPE')
 # Delete variables after to aliviate memory strain
-del da_d01_T2, da_d02_T2, da_d01_T2_cross, da_d02_T2_cross
+del da_d01_CAPE, da_d02_CAPE, da_d01_CAPE_cross, da_d02_CAPE_cross
 
+
+############ CIN     [hPa] ############
+step2_time = time.perf_counter()
+# d01
+ds = open_ds(file_d01_CIN,time_ind_d01,lat_ind_d01,lon_ind_d01)
+da_d01_CIN = ds['CIN'].compute()
+da_d01_CIN = da_d01_CIN.assign_coords(without_keys(d01_coords,'bottom_top'))
+da_d01_CIN = da_d01_CIN.where(da_d01_CIN!=fill_value_f8)    # Change fill_value points to nans
+# d02
+ds = open_ds(file_d02_CIN,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_CIN = ds['CIN'].compute()
+da_d02_CIN = da_d02_CIN.assign_coords(without_keys(d02_coords,'bottom_top'))
+da_d02_CIN = da_d02_CIN.where(da_d02_CIN!=fill_value_f8)    # Change fill_value points to nans
+
+step1_time = time.perf_counter()
+print('CIN loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+################ CIN - Cross-section Analysis #################
+# d01
+da_cross_temp, all_line_coords = cross_section_multi(da_d01_CIN, start_coord, end_coord, width, dx)
+# Create distance coordinate
+distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# Mannually checked which indicies were closest to the coast for d01 (where nan's end)
+distance_d01 = distance - distance[16]
+# Create da with coordinates
+da_d01_CIN_cross = make_da_cross(da_d01_CIN, da_cross_temp, 'CIN', distance_d01, width, all_line_coords)
+da_d01_CIN_cross.to_netcdf('./d01_cross_CIN')
+# d02
+da_cross_temp, all_line_coords = cross_section_multi(da_d02_CIN, start_coord, end_coord, width, dx)
+# Create distance coordinate
+distance = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+# Mannually checked which indicies were closest to the coast for d02 (where nan's end)
+distance_d02 = distance - distance[63]
+# Create da with coordinates
+da_d02_CIN_cross = make_da_cross(da_d02_CIN, da_cross_temp, 'CIN', distance_d02, width, all_line_coords)
+da_d02_CIN_cross.to_netcdf('./d02_cross_CIN')
+# Delete variables after to aliviate memory strain
+del da_d01_CIN, da_d02_CIN, da_d01_CIN_cross, da_d02_CIN_cross
 
 # ###########################################################################
 # ################################# All-sky #################################

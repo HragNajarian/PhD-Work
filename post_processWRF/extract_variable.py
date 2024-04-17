@@ -18,9 +18,9 @@
 	# input_file: The stitched WRFout file path. This can be done through the 'ncrcat' function
     # variable_name: A list of variables that you are interested in calculating
 			# 3D variables
-		# P == Pressure 		[hPa]
-		# U == Zonal wind 		[m/s],	destaggered
-		# V == Meridional wind 	[m/s],	destaggered
+		# P == Pressure 								[hPa]
+		# U == Zonal wind 								[m/s],	destaggered
+		# V == Meridional wind 							[m/s],	destaggered
 		# QV == Water vapor mixing ratio 				[kg/kg]
 		# QC == Cloud water mixing ratio 				[kg/kg]
 		# QR == Rain water mixing ratio 				[kg/kg]
@@ -30,6 +30,8 @@
 		# CLDFRA == Cloud Fraction
 		# Theta == Potential Temperature 				[K]
 		# H_DIABATIC == Microphysics Latent heating 	[K/s]
+		# CAPE == Convective available potential energy	[J/kg]
+		# CIN == Convective Inhibition 					[J/kg]
 		# RTHRATSWC == SW Radiative heating CLEAR SKY 	[K/s]
 		# RTHRATSW == SW Radiative heating 				[K/s]
 		# RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
@@ -43,6 +45,8 @@
 		# U10 == Zonal wind at 10m 				[m/s]
 		# V10 == Meridonal wind at 10m 			[m/s]
 		# PSFC == Pressure at surface 			[hPa]
+		# HGT == Terrain Height					[m]
+		# CAPE_CIN_2D == CAPE and CIN calculation		[J/kg]
 			# All sky
 		# LWUPT == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP , [W/m^2]
 		# LWDNT == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP , [W/m^2]
@@ -306,6 +310,25 @@ def extract_variable(input_file, variable_name, output_dir):
 				output_variable[t,...] = variable[t,...]
 			output_dataset.close()
 
+		# CAPE and CIN calculation [J/kg]
+		elif i == 'CAPE_CIN_3D':
+			variable = dataset.variables['CAPE_CIN']    # Latent Heating [K/s]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CAPE_CIN', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create the dimensions
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into the new nc file
+			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['CAPE_CIN'].dimensions)
+			temp_atts = dataset.variables['P'].__dict__
+			temp_atts.update({'description':'CAPE_CIN', 'units':'J/kg'})
+			output_variable.setncatts(temp_atts)
+			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+				variable = wrf.getvar(dataset, 'cape_3d', timeidx=t, meta=False)
+				output_variable[t,...] = variable[:]
+			output_dataset.close()	# Make sure you close the .nc file
+
 		# SW Radiative heating CLEAR SKY [K/s]
 		elif i == 'SWClear':
 			variable = dataset.variables['RTHRATSWC']    # SW Radiative heating CLEAR SKY [K/s]
@@ -504,6 +527,58 @@ def extract_variable(input_file, variable_name, output_dir):
 			# Convert Pa into hPa with /100
 			output_variable[:] = variable[:]/100	# not a large variable so no need to loop
 			output_dataset.close()
+		
+		# Terrain Height [m]
+		elif i == 'HGT':
+			variable = dataset.variables['HGT']	# [m]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_HGT', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
+		# CAPE 2-D space [J/kg]
+		elif i == 'CAPE':
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CAPE', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['XLAT'].dimensions)	# 'f4' == float32
+			temp_atts = dataset.variables['XLAT'].__dict__
+			temp_atts.update({'description':'CAPE', 'units':'J/kg'})
+			output_variable.setncatts(temp_atts)
+			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+				variable = wrf.getvar(dataset, 'cape_2d', timeidx=t, meta=False)[0,...]	# Only include CAPE with the [0,...]
+				output_variable[t,...] = variable[:]								
+			output_dataset.close()	# Make sure you close the .nc file
+
+		# CIN 2-D space [J/kg]
+		elif i == 'CIN':
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CIN', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['XLAT'].dimensions)	# 'f4' == float32
+			temp_atts = dataset.variables['XLAT'].__dict__
+			temp_atts.update({'description':'CIN', 'units':'J/kg'})
+			output_variable.setncatts(temp_atts)
+			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+				variable = wrf.getvar(dataset, 'cape_2d', timeidx=t, meta=False)[1,...]	# Only include CIN with the [0,...]
+				output_variable[t,...] = variable[:]								
+			output_dataset.close()	# Make sure you close the .nc file
 
 		#######################################################################
 		############################## RADIATION ##############################
@@ -787,8 +862,8 @@ input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['H_DIABATIC']
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['CAPE', 'CIN']
 
 # Call on your function:
 extract_variable(input_file_d01, variable_name, output_dir)
