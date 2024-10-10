@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[1]:
+
+
+'''
+Author: Hrag Najarian
+Date: January 2023
+'''
+
+
 # This code is meant to compare between the control run and the experiments when cloud-radiative interactions are turned off.
 
 # In[1]:
@@ -9,6 +18,7 @@
 from wrf import getvar, ALL_TIMES
 import matplotlib as mpl
 import cartopy.crs as ccrs
+from flox.xarray import xarray_reduce
 import glob
 import dask
 import wrf
@@ -26,11 +36,12 @@ import numpy as np
 import xarray as xr
 import os
 # from braceexpand import braceexpand
-# import pandas as pd
+import pandas as pd
 import time
 # import netCDF4 as nc
 from math import cos, asin, sqrt, pi, atan, degrees
 import scipy
+from scipy.optimize import curve_fit
 
 get_ipython().run_line_magic('matplotlib', 'inline')
 get_ipython().run_line_magic('config', "InlineBackend.figure_format='retina'")
@@ -39,7 +50,7 @@ get_ipython().run_line_magic('config', "InlineBackend.figure_format='retina'")
 # ### Set global variables
 # Anything that will be used throughout the script should be assigned here.
 
-# In[24]:
+# In[2]:
 
 
 # Set the bounds you want to look at
@@ -447,23 +458,6 @@ def dist(lat1, lon1, lat2, lon2):
 		# Based on the value, the projections using theta will change
 	# Project the current x and y coordinate to the new rotated x and y coordinates for each component.
 	# Once rotated, return the rotated x and y components
-# Example:
-	# da_x = da_d01_U
-	# da_y = da_d01_V
-	# theta = pi/4	# 45° rotation anti-clockwise
-	# da_d01_U_rotated, da_d01_V_rotated = rotate_vec(da_x, da_y, theta)
-
-# def rotate_vec(da_x, da_y, theta):
-# 	# anti-clockwise rotation
-# 	if theta > 0:
-# 		da_x_rot = da_x*cos(theta) + da_y*cos((pi/2)-theta)
-# 		da_y_rot = da_x*cos((pi/2)-theta) + da_y*cos(theta)
-# 	# clockwise rotation
-# 	if theta < 0:
-# 		da_x_rot = da_x*cos(-theta) + da_y*cos((pi/2)+theta)
-# 		da_y_rot = da_x*cos((pi/2)+theta) + da_y*cos(-theta)
-
-# 	return da_x_rot, da_y_rot
 
 def rotate_vec(da_x, da_y, theta):
 	# anti-clockwise rotation
@@ -635,6 +629,10 @@ def wrf_np2da(xrDataset,Dataset,varname):
 # Input:
     # da = xr.DataArray;  Must be in shape: time x south_north x west_east
 		# Make sure west_east/XLONG values are 0->360, not -180->+180
+	# dim_num = 2 or 3;  This indicates to the function if you want Local Time
+		# within the dataarray to be only a function of time and longitude, or
+		# time, lognitude, and latitude. This is a preference and if you don't need
+		# it as a function of latitude, it will save lots of time going with dim_num = 2.
 # Output:
     # da: This will be the DataArray with the newly assigned coordinate
 # Process:
@@ -643,13 +641,25 @@ def wrf_np2da(xrDataset,Dataset,varname):
     # Loop through each timestep and longitude to determine the local time.
     # Assign the new Local Time coordinate to the da and return it.
 
-def assign_LT_coord(da):
+
+def assign_LT_coord(da, dim_num):
 	hour_offset = (da.XLONG.values[:,0,:]/15).round(decimals=0)
-	local_time = np.empty([len(da.Time),len(da.west_east)], dtype=object)
-	for i in range(local_time.shape[0]):
-		for j in range(local_time.shape[1]):
-			local_time[i,j] = da.XTIME.values[i] + np.timedelta64(int(hour_offset[0,j]),'h')
-	da = da.assign_coords(LocalTime=(('Time','west_east'),local_time))
+
+	# Local Time is a function of only Time and Longitude
+	if dim_num==2:
+		local_time = np.empty([len(da.Time),len(da.west_east)], dtype=object)
+		for i in range(local_time.shape[0]):
+			for j in range(local_time.shape[1]):
+				local_time[i,j] = da.Time.values[i] + np.timedelta64(int(hour_offset[0,j]),'h')
+		da = da.assign_coords(LocalTime=(('Time','west_east'),local_time))
+	
+	# Local Time is a function of Time, Longitude, and Latitude
+	else:
+		local_time = np.empty([len(da.Time),len(da.south_north),len(da.west_east)], dtype='datetime64[ns]')
+		for i in range(local_time.shape[0]):
+			for j in range(local_time.shape[2]):
+				local_time[i,:,j] = da.Time.values[i] + np.timedelta64(int(hour_offset[0,j]),'h')
+		da = da.assign_coords(LocalTime=(('Time','south_north','west_east'),local_time))
 	return da
 
 
@@ -682,6 +692,31 @@ end_coord 		= [5.2,108.8]
 degrees(calculate_angle_between_points(start_coord, end_coord))
 
 
+# In[24]:
+
+
+# Makes making tick labels easier
+# ticks are integers
+def degree_labels(ticks, lat_or_lon):
+
+	labels = []
+	
+	if lat_or_lon=='lat':
+		for t in ticks:
+			if t >= 0:
+				labels.append(str(t)+u'\N{DEGREE SIGN}N')
+			else:
+				labels.append(str(t)+u'\N{DEGREE SIGN}S')
+				
+	elif lat_or_lon=='lon':
+		for t in ticks:
+			if t >= 0:
+				labels.append(str(t)+u'\N{DEGREE SIGN}E')
+			else:
+				labels.append(str(t)+u'\N{DEGREE SIGN}W')
+	return labels
+
+
 # ## Load Data
 
 # ### Control Data [Spatial]
@@ -701,15 +736,20 @@ parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajari
 file_d01_raw = parent_dir + '/raw/d01'
 file_d02_raw = parent_dir + '/raw/d02'
 # 2-D data
-file_d01_RR = parent_dir + '/L1/d01_RR'				# [mm/dt]
+file_d02_HFX = parent_dir + '/L1/d02_HFX'			    # [W/m^2]
+file_d02_LowCLDFRA = parent_dir + '/L1/d02_LowCLDFRA'   # [0->1]
+file_d02_MidCLDFRA = parent_dir + '/L1/d02_MidCLDFRA'   # [0->1]
+file_d02_HighCLDFRA = parent_dir + '/L1/d02_HighCLDFRA' # [0->1]
+file_d02_LWDNB = parent_dir + '/L1/d02_LWDNB'		# [W/m^2]
+file_d02_LWUPB = parent_dir + '/L1/d02_LWUPB'		# [W/m^2]
+file_d02_SWDNB = parent_dir + '/L1/d02_SWDNB'		# [W/m^2]
+file_d02_SWUPB = parent_dir + '/L1/d02_SWUPB'		# [W/m^2]
+file_d02_SWDNBC = parent_dir + '/L1/d02_SWDNBC'		# [W/m^2]
+file_d02_SWUPBC = parent_dir + '/L1/d02_SWUPBC'		# [W/m^2]
 file_d02_RR = parent_dir + '/L1/d02_RR'				# [mm/dt]
-file_d01_PSFC = parent_dir + '/L1/d01_PSFC'		    # [hPa]
 file_d02_PSFC = parent_dir + '/L1/d02_PSFC'		    # [hPa]
-file_d01_T2 = parent_dir + '/L1/d01_T2'		        # [K]
 file_d02_T2 = parent_dir + '/L1/d02_T2'		        # [K]
-file_d01_U10 = parent_dir + '/L1/d01_U10'		    # [m/s]
 file_d02_U10 = parent_dir + '/L1/d02_U10'		    # [m/s]
-file_d01_V10 = parent_dir + '/L1/d01_V10'		    # [m/s]
 file_d02_V10 = parent_dir + '/L1/d02_V10'		    # [m/s]
 # Raw data
 file_d01_P = parent_dir + '/L1/d01_P'				# [mm/dt]
@@ -735,13 +775,6 @@ file_d01_SWClear = parent_dir + '/L2/d01_interp_SWClear'# [K/s]
 file_d02_SWClear = parent_dir + '/L2/d02_interp_SWClear'# [K/s]
 file_d01_Theta = parent_dir + '/L2/d01_interp_Theta'	# [K]
 file_d02_Theta = parent_dir + '/L2/d02_interp_Theta'	# [K]
-    # At single hPa levels
-# file_d01_QV850 = parent_dir + '/L2/d01_interp_QV850'	# [kg/kg]
-# file_d02_QV850 = parent_dir + '/L2/d02_interp_QV850'	# [kg/kg]
-# file_d01_U850 = parent_dir + '/L2/d01_interp_U850'	# [m/s]
-# file_d02_U850 = parent_dir + '/L2/d02_interp_U850'	# [m/s]
-# file_d01_U200 = parent_dir + '/L2/d01_interp_U200'	# [m/s]
-# file_d02_U200 = parent_dir + '/L2/d02_interp_U200'	# [m/s]
 
 ######################################################################################
 ################ Declare the bounds you want to specifically look at #################
@@ -751,7 +784,8 @@ lats = [-20, 20]
 lons = [80, 135]
 
 #### Some of the data
-times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-03T00')]
+# times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-03T00')]
+times = [np.datetime64('2015-11-23T01'), np.datetime64('2015-12-02T00')]        # NCRF Sunrise
 # times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-11-23T12')]
 # times = [np.datetime64('2015-11-25T00'), np.datetime64('2015-11-26T12')]
 # lats = [-7.5, 7.5]
@@ -772,8 +806,6 @@ print('Dataset loaded \N{check mark}', step1_time-start_time, 'seconds')
 step2_time = time.perf_counter()
 interp_P_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
-interp_P_levels_d01 = np.resize(interp_P_levels,(ds_d01.XLAT.shape[2],ds_d01.XLAT.shape[1],len(interp_P_levels)))
-interp_P_levels_d01 = np.swapaxes(interp_P_levels_d01, 0, 2)
 d01_coords = dict(
     XLAT=(('Time','south_north','west_east'),ds_d01.XLAT.values),
     XLONG=(('Time','south_north','west_east'),ds_d01.XLONG.values),
@@ -782,8 +814,7 @@ d01_coords = dict(
     south_north=(('south_north'),ds_d01.XLAT[0,:,0].values),
     west_east=(('west_east'),ds_d01.XLONG[0,0,:].values)
     )
-interp_P_levels_d02 = np.resize(interp_P_levels,(ds_d02.XLAT.shape[2],ds_d02.XLAT.shape[1],len(interp_P_levels)))
-interp_P_levels_d02 = np.swapaxes(interp_P_levels_d02, 0, 2)
+
 d02_coords = dict(
     XLAT=(('Time','south_north','west_east'),ds_d02.XLAT.values),
     XLONG=(('Time','south_north','west_east'),ds_d02.XLONG.values),
@@ -858,21 +889,39 @@ print('Created coordinate dictionaries \N{check mark}', step1_time-step2_time, '
 # step1_time = time.perf_counter()
 # print('Interpolated water vapor mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
-# ############ Cloud Fraction [0-1] ############
+############ Cloud Fraction [0-1] ############
 # step2_time = time.perf_counter()
 # # d01
 # ds = open_ds(file_d01_CLDFRA,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_CLDFRA = ds['CLDFRA'].compute()
+# da_d01_CLDFRA = ds['CLDFRA']
+# # Turn the fill value into nan's before averaging
+# da_d01_CLDFRA = xr.where(da_d01_CLDFRA>1, np.nan, da_d01_CLDFRA)
 # da_d01_CLDFRA = da_d01_CLDFRA.assign_coords(d01_coords)
-# da_d01_CLDFRA = da_d01_CLDFRA.where(da_d01_CLDFRA!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_CLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_CLDFRA = ds['CLDFRA'].compute()
-# da_d02_CLDFRA = da_d02_CLDFRA.assign_coords(d02_coords)
-# da_d02_CLDFRA = da_d02_CLDFRA.where(da_d02_CLDFRA!=fill_value_f8)    # Change fill_value points to nans
 
-# step1_time = time.perf_counter()
-# print('Cloud fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+# d02
+# ds = open_ds(file_d02_CLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_CLDFRA = ds['CLDFRA']
+# # Turn the fill value into nan's before averaging
+# da_d02_CLDFRA = xr.where(da_d02_CLDFRA>1, np.nan, da_d02_CLDFRA)
+# da_d02_CLDFRA = da_d02_CLDFRA.assign_coords(d02_coords)
+
+# # Uncomment bellow if first time running
+# 	# Low Cloud Fraction [1000-750 hPa]
+# inds = np.where((interp_P_levels<=1000)&(interp_P_levels>=750))[0]
+# da_d02_LowCLDFRA = da_d02_CLDFRA.isel(bottom_top=slice(inds[0],inds[-1])).mean('bottom_top', skipna=True)
+# 	# Mid Cloud Fraction [750-500 hPa]
+# inds = np.where((interp_P_levels<=750)&(interp_P_levels>=500))[0]
+# da_d02_MidCLDFRA = da_d02_CLDFRA.isel(bottom_top=slice(inds[0],inds[-1])).mean('bottom_top', skipna=True)
+# 	# High Cloud Fraction [500-200 hPa]
+# inds = np.where((interp_P_levels<=500)&(interp_P_levels>=200))[0]
+# da_d02_HighCLDFRA = da_d02_CLDFRA.isel(bottom_top=slice(inds[0],inds[-1])).mean('bottom_top', skipna=True)
+
+# Save the computed cloud type fractions
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/L1'
+# os.chdir(parent_dir)
+# da_d02_LowCLDFRA.to_netcdf(path='d02_LowCLDFRA', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_MidCLDFRA.to_netcdf(path='d02_MidCLDFRA', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_HighCLDFRA.to_netcdf(path='d02_HighCLDFRA', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 
 # ############ Latent Heating [K/s] ############
 # step2_time = time.perf_counter()
@@ -983,12 +1032,140 @@ print('Created coordinate dictionaries \N{check mark}', step1_time-step2_time, '
 
 ##################### 2-D variables #######################
 
+############ HFX     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_HFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_HFX = ds['HFX'].compute()
+da_d02_HFX = da_d02_HFX.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('HFX loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ Low Cloud Fraction     [0->1] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_LowCLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_LowCLDFRA = ds['CLDFRA'].compute()
+da_d02_LowCLDFRA = da_d02_LowCLDFRA.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Low Cloud Fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ Mid Cloud Fraction     [0->1] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_MidCLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_MidCLDFRA = ds['CLDFRA'].compute()
+da_d02_MidCLDFRA = da_d02_MidCLDFRA.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Mid Cloud Fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ High Cloud Fraction     [0->1] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_HighCLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_HighCLDFRA = ds['CLDFRA'].compute()
+da_d02_HighCLDFRA = da_d02_HighCLDFRA.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('High Cloud Fraction loaded \N{check mark}', step1_time-step2_time, 'seconds') 
+
+############ LWDNB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_LWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_LWDNB = ds['LWDNB'].compute()
+da_d02_LWDNB = da_d02_LWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Longwave Downwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ LWUPB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_LWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_LWUPB = ds['LWUPB'].compute()
+da_d02_LWUPB = da_d02_LWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Longwave Upwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ LWSFC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_LWSFC = da_d02_LWDNB - da_d02_LWUPB
+
+step1_time = time.perf_counter()
+print('Longwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWDNB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_SWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_SWDNB = ds['SWDNB'].compute()
+da_d02_SWDNB = da_d02_SWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Shortwave Downwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWUPB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_SWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_SWUPB = ds['SWUPB'].compute()
+da_d02_SWUPB = da_d02_SWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Shortwave Upwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWSFC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_SWSFC = da_d02_SWDNB - da_d02_SWUPB
+
+step1_time = time.perf_counter()
+print('Shortwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWDNBC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_SWDNBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_SWDNBC = ds['SWDNBC'].compute()
+da_d02_SWDNBC = da_d02_SWDNBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Clear Shortwave Downwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWUPBC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_SWUPBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_SWUPBC = ds['SWUPBC'].compute()
+da_d02_SWUPBC = da_d02_SWUPBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Clear Shortwave Upwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWSFC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_SWSFC_Clear = da_d02_SWDNBC - da_d02_SWUPBC
+
+step1_time = time.perf_counter()
+print('Clear Shortwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWSFC CRF     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_SWSFC_CRF = da_d02_SWSFC - da_d02_SWSFC_Clear
+
+step1_time = time.perf_counter()
+print('CRF Shortwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
 ############ Rain Rate     [mm/hr] ############
 step2_time = time.perf_counter()
-# d01
-ds = open_ds(file_d01_RR,time_ind_d01,lat_ind_d01,lon_ind_d01)
-da_d01_RR = ds['RR'].compute()
-da_d01_RR = da_d01_RR.assign_coords(without_keys(d01_coords,'bottom_top'))
 # d02
 ds = open_ds(file_d02_RR,time_ind_d02,lat_ind_d02,lon_ind_d02)
 da_d02_RR = ds['RR'].compute()
@@ -999,10 +1176,6 @@ print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
 ############ Surface Pressure     [hPa] ############
 step2_time = time.perf_counter()
-# d01
-ds = open_ds(file_d01_PSFC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-da_d01_PSFC = ds['PSFC'].compute()
-da_d01_PSFC = da_d01_PSFC.assign_coords(without_keys(d01_coords,'bottom_top'))
 # d02
 ds = open_ds(file_d02_PSFC,time_ind_d02,lat_ind_d02,lon_ind_d02)
 da_d02_PSFC = ds['PSFC'].compute()
@@ -1023,64 +1196,494 @@ print('Landmask loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
 ############ Terrain Height    [m]  ############
 step2_time = time.perf_counter()
-# d01
-da_d01_TOPO = ds_d01['HGT'].sel(Time=slice(1)).compute().squeeze()
 # d02
 da_d02_TOPO = ds_d02['HGT'].sel(Time=slice(1)).compute().squeeze()
 
 step1_time = time.perf_counter()
 print('Terrain Height loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
-# ############ Temporal and Spatial variables ############
-# step2_time = time.perf_counter()
-# da_d01_LATS, da_d01_LONGS = wrf.latlon_coords(da_d01_LANDMASK)	# Lat & Lon [degrees]
-# da_d02_LATS, da_d02_LONGS = wrf.latlon_coords(da_d02_LANDMASK)	# Lat & Lon [degrees]
-# step1_time = time.perf_counter()
-# print('Tempospatial variables loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
 print('Domain d01 & d02 \N{check mark}', step1_time-start_time, 'seconds')
 
-## Check if rotated coordinate system makes sense:
 
-# theta = np.pi/4
-# da_u, da_v = rotate_vec(da_d01_U.isel(Time=2,bottom_top=4), da_d01_V.isel(Time=2,bottom_top=4), theta)
-# da_u_rot = da_u.rename('U')
-# da_v_rot = da_v.rename('V')
-# da_u_unrot = da_d01_U.isel(Time=2,bottom_top=4).rename('U')
-# da_v_unrot = da_d01_V.isel(Time=2,bottom_top=4).rename('V')
+# In[26]:
 
-# # Create Dataset
-# 	# Additionally, only look at every x-point so it's not too crowded
-# x = 6
-# da_U_rot = xr.merge([da_u_rot[::x,::x],da_v_rot[::x,::x]])
-# da_U_unrot = xr.merge([da_u_unrot[::x,::x],da_v_unrot[::x,::x]])
 
-# ax = plt.subplot(projection=ccrs.PlateCarree())
+# d02
+# da_d02_LANDMASK = ds_d02['LANDMASK'].sel(Time=slice(1)).compute().squeeze()   # Land = 1, Water = 0
 
-# r_rot = da_U_rot.plot.quiver(x="XLONG", y="XLAT",u='U',v='V', ax=ax,color='r',alpha=0.5)
-# r_unrot = da_U_unrot.plot.quiver(x="XLONG", y="XLAT",u='U',v='V', ax=ax,color='k',alpha=0.5)
 
-# ax.set_title('Theta = ' + str(theta))
-# ax.coastlines()
+# ### NCRF Sunrise Data [Spatial]
+
+# In[ ]:
+
+
+start_time = time.perf_counter()
+
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+
+# Raw data
+file_d02_sunrise = parent_dir + '/raw/d02_sunrise'
+file_d02_sunset = parent_dir + '/raw/d02_sunset'
+# 2-D data
+file_d02_sunrise_RR = parent_dir + '/L1/d02_sunrise_RR'				# [mm/dt]
+file_d02_sunset_RR = parent_dir + '/L1/d02_sunset_RR'				# [mm/dt]
+file_d02_sunrise_HFX = parent_dir + '/L1/d02_sunrise_HFX'			# [W/m^2]
+file_d02_sunset_HFX = parent_dir + '/L1/d02_sunset_HFX'				# [W/m^2]
+file_d02_sunrise_LowCLDFRA = parent_dir + '/L1/d02_sunrise_LowCLDFRA'		# [0->1]
+file_d02_sunset_LowCLDFRA = parent_dir + '/L1/d02_sunset_LowCLDFRA'			# [0->1]
+file_d02_sunrise_MidCLDFRA = parent_dir + '/L1/d02_sunrise_MidCLDFRA'		# [0->1]
+file_d02_sunset_MidCLDFRA = parent_dir + '/L1/d02_sunset_MidCLDFRA'			# [0->1]
+file_d02_sunrise_HighCLDFRA = parent_dir + '/L1/d02_sunrise_HighCLDFRA'		# [0->1]
+file_d02_sunset_HighCLDFRA = parent_dir + '/L1/d02_sunset_HighCLDFRA'		# [0->1]
+file_d02_sunrise_LWDNB = parent_dir + '/L1/d02_sunrise_LWDNB'		# [W/m^2]
+file_d02_sunset_LWDNB = parent_dir + '/L1/d02_sunset_LWDNB'			# [W/m^2]
+file_d02_sunrise_LWUPB = parent_dir + '/L1/d02_sunrise_LWUPB'		# [W/m^2]
+file_d02_sunset_LWUPB = parent_dir + '/L1/d02_sunset_LWUPB'			# [W/m^2]
+file_d02_sunrise_SWDNB = parent_dir + '/L1/d02_sunrise_SWDNB'		# [W/m^2]
+file_d02_sunset_SWDNB = parent_dir + '/L1/d02_sunset_SWDNB'			# [W/m^2]
+file_d02_sunrise_SWUPB = parent_dir + '/L1/d02_sunrise_SWUPB'		# [W/m^2]
+file_d02_sunset_SWUPB = parent_dir + '/L1/d02_sunset_SWUPB'			# [W/m^2]
+file_d02_sunrise_SWDNBC = parent_dir + '/L1/d02_sunrise_SWDNBC'		# [W/m^2]
+file_d02_sunset_SWDNBC = parent_dir + '/L1/d02_sunset_SWDNBC'			# [W/m^2]
+file_d02_sunrise_SWUPBC = parent_dir + '/L1/d02_sunrise_SWUPBC'		# [W/m^2]
+file_d02_sunset_SWUPBC = parent_dir + '/L1/d02_sunset_SWUPBC'			# [W/m^2]
+# 3-D data
+file_d02_sunrise_CLDFRA = parent_dir + '/L2/d02_sunrise_interp_CLDFRA'		# [0->1]
+file_d02_sunset_CLDFRA = parent_dir + '/L2/d02_sunset_interp_CLDFRA'	    # [0->1]
+
+######################################################################################
+################ Declare the bounds you want to specifically look at #################
+#### All the data 
+# times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-02T12')]
+lats = [-20, 20]
+lons = [80, 135]
+
+#### Some of the data
+# times = [np.datetime64('2015-11-23T13'), np.datetime64('2015-12-02T12')]      # NCRF Sunset
+times = [np.datetime64('2015-11-23T01'), np.datetime64('2015-12-02T00')]        # NCRF Sunrise
+# times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-11-23T12')]
+# times = [np.datetime64('2015-11-25T00'), np.datetime64('2015-11-26T12')]
+# lats = [-7.5, 7.5]
+# lons = [90, 115]
+######################################################################################
+# Setup the indicies that will be used throughout
+time_ind_d02, lat_ind_d02, lon_ind_d02 = isel_ind(file_d02_sunrise, times, lats, lons)
+
+# Raw datasets
+ds_d02 = open_ds(file_d02_sunrise,time_ind_d02,lat_ind_d02,lon_ind_d02)
+step1_time = time.perf_counter()
+print('Dataset loaded \N{check mark}', step1_time-start_time, 'seconds')
+
+# Coordinate dictionaries:
+step2_time = time.perf_counter()
+interp_P_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+
+d02_coords = dict(
+    XLAT=(('Time','south_north','west_east'),ds_d02.XLAT.values),
+    XLONG=(('Time','south_north','west_east'),ds_d02.XLONG.values),
+    bottom_top=(('bottom_top'),interp_P_levels),
+    Time=('Time',ds_d02.XTIME.values),
+    south_north=(('south_north'),ds_d02.XLAT[0,:,0].values),
+    west_east=(('west_east'),ds_d02.XLONG[0,0,:].values)
+    )
+
+step1_time = time.perf_counter()
+print('Created coordinate dictionaries \N{check mark}', step1_time-step2_time, 'seconds')
+
+
+###########################################################
+################# Load in the variables ###################
+###########################################################
+
+
+##################### 3-D variables #######################
+
+# ############ Interpolated zonal winds   [m/s] #############
+# step2_time = time.perf_counter()
+# # d01   # how I used to open data: ds = xr.open_dataset(file_d01_U).isel(Time=slice(0,t))
+# ds = open_ds(file_d01_U,time_ind_d01,lat_ind_d01,lon_ind_d01)
+
+# da_d01_U = ds['U'].compute()
+# da_d01_U = da_d01_U.assign_coords(d01_coords)
+# fill_value_f8 = da_d01_U.max()      # This is the fill_value meaning missing_data
+# da_d01_U = da_d01_U.where(da_d01_U!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_U = ds['U'].compute()
+# da_d02_U = da_d02_U.assign_coords(d02_coords)
+# # fill_value = da_d02_U.max()      # This is the fill_value meaning missing_data
+# da_d02_U = da_d02_U.where(da_d02_U!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Interpolated zonal winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+
+# ############ Interpolated Meridional winds   [m/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_V,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_V = ds['V'].compute()
+# da_d01_V = da_d01_V.assign_coords(d01_coords)
+# # fill_value = da_d01_V.max()      # This is the fill_value meaning missing_data
+# da_d01_V = da_d01_V.where(da_d01_V!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_V,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_V = ds['V'].compute()
+# da_d02_V = da_d02_V.assign_coords(d02_coords)
+# # fill_value = da_d02_V.max()      # This is the fill_value meaning missing_data
+# da_d02_V = da_d02_V.where(da_d02_V!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Interpolated meridional winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Interpolated water vapor mixing ratio  [kg/kg] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_QV,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_QV = ds['QV'].compute()
+# da_d01_QV = da_d01_QV.assign_coords(d01_coords)
+# da_d01_QV = da_d01_QV.where(da_d01_QV!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_QV,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_QV = ds['QV'].compute()
+# da_d02_QV = da_d02_QV.assign_coords(d02_coords)
+# da_d02_QV = da_d02_QV.where(da_d02_QV!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Interpolated water vapor mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Cloud Fraction [0->1] ############
+# step2_time = time.perf_counter()
+# # d02
+# ds = open_ds(file_d02_sunrise_CLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_sunrise_CLDFRA = ds['CLDFRA']
+# # Turn the fill value into nan's before averaging
+# da_d02_sunrise_CLDFRA = xr.where(da_d02_sunrise_CLDFRA>1, np.nan, da_d02_sunrise_CLDFRA)
+# da_d02_sunrise_CLDFRA = da_d02_sunrise_CLDFRA.assign_coords(d02_coords)
+
+# # # Uncomment bellow if first time running
+# # 	# Low Cloud Fraction [1000-750 hPa]
+# # inds = np.where((interp_P_levels<=1000)&(interp_P_levels>=750))[0]
+# # da_d02_sunrise_LowCLDFRA = da_d02_sunrise_CLDFRA.isel(bottom_top=slice(inds[0],inds[-1])).mean('bottom_top', skipna=True)
+# # 	# Mid Cloud Fraction [750-500 hPa]
+# # inds = np.where((interp_P_levels<=750)&(interp_P_levels>=500))[0]
+# # da_d02_sunrise_MidCLDFRA = da_d02_sunrise_CLDFRA.sel(bottom_top=slice(inds[0],inds[-1])).mean('bottom_top', skipna=True)
+# # 	# High Cloud Fraction [500-200 hPa]
+# # inds = np.where((interp_P_levels<=500)&(interp_P_levels>=200))[0]
+# # da_d02_sunrise_HighCLDFRA = da_d02_sunrise_CLDFRA.sel(bottom_top=slice(inds[0],inds[-1])).mean('bottom_top', skipna=True)
+
+# # # Save the computed cloud type fractions
+# # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff/L1'
+# # os.chdir(parent_dir)
+# # da_d02_sunrise_LowCLDFRA.to_netcdf(path='d02_sunrise_LowCLDFRA', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# # da_d02_sunrise_MidCLDFRA.to_netcdf(path='d02_sunrise_MidCLDFRA', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# # da_d02_sunrise_HighCLDFRA.to_netcdf(path='d02_sunrise_HighCLDFRA', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+
+# # step1_time = time.perf_counter()
+# # print('Cloud fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+
+# ############ Latent Heating [K/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_H_DIABATIC,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_H_DIABATIC = ds['H_DIABATIC'].compute()
+# da_d01_H_DIABATIC = da_d01_H_DIABATIC.assign_coords(d01_coords)
+# da_d01_H_DIABATIC = da_d01_H_DIABATIC.where(da_d01_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_H_DIABATIC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_H_DIABATIC = ds['H_DIABATIC'].compute()
+# da_d02_H_DIABATIC = da_d02_H_DIABATIC.assign_coords(d02_coords)
+# da_d02_H_DIABATIC = da_d02_H_DIABATIC.where(da_d02_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Latent heating loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Potential Temperature [K] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_Theta,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_Theta = ds['Theta'].compute()
+# da_d01_Theta = da_d01_Theta.assign_coords(d01_coords)
+# da_d01_Theta = da_d01_Theta.where(da_d01_Theta!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_Theta,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_Theta = ds['Theta'].compute()
+# da_d02_Theta = da_d02_Theta.assign_coords(d02_coords)
+# da_d02_Theta = da_d02_Theta.where(da_d02_Theta!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Shortwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Longwave Radiative Heating All-Sky [K/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_LWAll,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_LWAll = ds['LWAll'].compute()
+# da_d01_LWAll = da_d01_LWAll.assign_coords(d01_coords)
+# da_d01_LWAll = da_d01_LWAll.where(da_d01_LWAll!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_LWAll,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_LWAll = ds['LWAll'].compute()
+# da_d02_LWAll = da_d02_LWAll.assign_coords(d02_coords)
+# da_d02_LWAll = da_d02_LWAll.where(da_d02_LWAll!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Longwave All-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Longwave Radiative Heating Clear-Sky [K/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_LWClear,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_LWClear = ds['LWClear'].compute()
+# da_d01_LWClear = da_d01_LWClear.assign_coords(d01_coords)
+# da_d01_LWClear = da_d01_LWClear.where(da_d01_LWClear!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_LWClear,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_LWClear = ds['LWClear'].compute()
+# da_d02_LWClear = da_d02_LWClear.assign_coords(d02_coords)
+# da_d02_LWClear = da_d02_LWClear.where(da_d02_LWClear!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Longwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Shortwave Radiative Heating All-Sky [K/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_SWAll,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_SWAll = ds['SWAll'].compute()
+# da_d01_SWAll = da_d01_SWAll.assign_coords(d01_coords)
+# da_d01_SWAll = da_d01_SWAll.where(da_d01_SWAll!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_SWAll,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_SWAll = ds['SWAll'].compute()
+# da_d02_SWAll = da_d02_SWAll.assign_coords(d02_coords)
+# da_d02_SWAll = da_d02_SWAll.where(da_d02_SWAll!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Shortwave All-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Shortwave Radiative Heating Clear-Sky [K/s] ############
+# step2_time = time.perf_counter()
+# # d01
+# ds = open_ds(file_d01_SWClear,time_ind_d01,lat_ind_d01,lon_ind_d01)
+# da_d01_SWClear = ds['SWClear'].compute()
+# da_d01_SWClear = da_d01_SWClear.assign_coords(d01_coords)
+# da_d01_SWClear = da_d01_SWClear.where(da_d01_SWClear!=fill_value_f8)    # Change fill_value points to nans
+# # d02
+# ds = open_ds(file_d02_SWClear,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_SWClear = ds['SWClear'].compute()
+# da_d02_SWClear = da_d02_SWClear.assign_coords(d02_coords)
+# da_d02_SWClear = da_d02_SWClear.where(da_d02_SWClear!=fill_value_f8)    # Change fill_value points to nans
+
+# step1_time = time.perf_counter()
+# print('Shortwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Cloud-Radiative Forcing Calculations ############
+# # Longwave
+# da_d01_LWCRF = da_d01_LWAll - da_d01_LWClear
+# da_d02_LWCRF = da_d02_LWAll - da_d02_LWClear
+# # Shortwave
+# da_d01_SWCRF = da_d01_SWAll - da_d01_SWClear
+# da_d02_SWCRF = da_d02_SWAll - da_d02_SWClear
+# # Total
+# da_d01_TotalCRF = da_d01_LWCRF + da_d01_SWCRF
+# da_d02_TotalCRF = da_d02_LWCRF + da_d02_SWCRF
+
+##################### 2-D variables #######################
+
+############ HFX     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_HFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_HFX = ds['HFX'].compute()
+da_d02_sunrise_HFX = da_d02_sunrise_HFX.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('HFX loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ Low Cloud Fraction     [0->1] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_LowCLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_LowCLDFRA = ds['CLDFRA'].compute()
+da_d02_sunrise_LowCLDFRA = da_d02_sunrise_LowCLDFRA.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Low Cloud Fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ Mid Cloud Fraction     [0->1] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_MidCLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_MidCLDFRA = ds['CLDFRA'].compute()
+da_d02_sunrise_MidCLDFRA = da_d02_sunrise_MidCLDFRA.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Mid Cloud Fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ High Cloud Fraction     [0->1] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_HighCLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_HighCLDFRA = ds['CLDFRA'].compute()
+da_d02_sunrise_HighCLDFRA = da_d02_sunrise_HighCLDFRA.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('High Cloud Fraction loaded \N{check mark}', step1_time-step2_time, 'seconds') 
+
+############ LWDNB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_LWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_LWDNB = ds['LWDNB'].compute()
+da_d02_sunrise_LWDNB = da_d02_sunrise_LWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Longwave Downwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ LWUPB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_LWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_LWUPB = ds['LWUPB'].compute()
+da_d02_sunrise_LWUPB = da_d02_sunrise_LWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Longwave Upwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ LWSFC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_sunrise_LWSFC = da_d02_sunrise_LWDNB - da_d02_sunrise_LWUPB
+
+step1_time = time.perf_counter()
+print('Longwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWDNB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_SWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_SWDNB = ds['SWDNB'].compute()
+da_d02_sunrise_SWDNB = da_d02_sunrise_SWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Shortwave Downwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWUPB     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_SWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_SWUPB = ds['SWUPB'].compute()
+da_d02_sunrise_SWUPB = da_d02_sunrise_SWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Shortwave Upwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWSFC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_sunrise_SWSFC = da_d02_sunrise_SWDNB - da_d02_sunrise_SWUPB
+
+step1_time = time.perf_counter()
+print('Shortwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWDNBC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_SWDNBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_SWDNBC = ds['SWDNBC'].compute()
+da_d02_sunrise_SWDNBC = da_d02_sunrise_SWDNBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Clear Shortwave Downwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWUPBC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_SWUPBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_SWUPBC = ds['SWUPBC'].compute()
+da_d02_sunrise_SWUPBC = da_d02_sunrise_SWUPBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Clear Shortwave Upwelling Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWSFC     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_sunrise_SWSFC_Clear = da_d02_sunrise_SWDNBC - da_d02_sunrise_SWUPBC
+
+step1_time = time.perf_counter()
+print('Clear Shortwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ SWSFC CRF     [W/m^2] ############
+step2_time = time.perf_counter()
+# d02
+da_d02_sunrise_SWSFC_CRF = da_d02_sunrise_SWSFC - da_d02_sunrise_SWSFC_Clear
+
+step1_time = time.perf_counter()
+print('CRF Shortwave Surface Flux calculated \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ Rain Rate     [mm/hr] ############
+step2_time = time.perf_counter()
+# d02
+ds = open_ds(file_d02_sunrise_RR,time_ind_d02,lat_ind_d02,lon_ind_d02)
+da_d02_sunrise_RR = ds['RR'].compute()
+da_d02_sunrise_RR = da_d02_sunrise_RR.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+step1_time = time.perf_counter()
+print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Surface Pressure     [hPa] ############
+# step2_time = time.perf_counter()
+# # d02
+# ds = open_ds(file_d02_PSFC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+# da_d02_PSFC = ds['PSFC'].compute()
+# da_d02_PSFC = da_d02_PSFC.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+# step1_time = time.perf_counter()
+# print('Surface Pressure loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Detection of land & water  ############
+# step2_time = time.perf_counter()
+# # d02
+# da_d02_LANDMASK = ds_d02['LANDMASK'].sel(Time=slice(1)).compute().squeeze()   # Land = 1, Water = 0
+
+# step1_time = time.perf_counter()
+# print('Landmask loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+# ############ Terrain Height    [m]  ############
+# step2_time = time.perf_counter()
+# # d02
+# da_d02_TOPO = ds_d02['HGT'].sel(Time=slice(1)).compute().squeeze()
+
+# step1_time = time.perf_counter()
+# print('Terrain Height loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+
+print('Domain d01 & d02 \N{check mark}', step1_time-start_time, 'seconds')
 
 
 # ### Cross-Section data
 
 # #### Control
 
-# In[39]:
+# In[ ]:
 
 
 # cd into the directory with your cross-sectional datasets to make the file paths when using xr.open_dataset a lot shorter
-os.chdir('/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/L3/Borneo_northwest')
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/L3/'
 
-# # Set the parameters for the specific island
-#     # Sumatra
-# start_coord		= [-1.8,103.8]
-# end_coord 		= [-5.8,99.8]
-# width			= 1.5
-# dx 				= 0.025
-# theta           = pi/4
+# Select which cross-sectional data you'd like to observe
+cross_dir = 'Sumatra_northwest'
+
+# This are global parameters used throughout cross-section analysis
+if cross_dir == 'Sumatra_mid_central': cross_sec, cross_title = (1,'Sumatra Mid Central')
+elif cross_dir == 'Sumatra_northwest': cross_sec, cross_title = (2,'Sumatra Northwest')
+elif cross_dir == 'Borneo_northwest': cross_sec, cross_title = (3,'Borneo Northwest')
+
+# cd into the specific cross-section directory
+os.chdir(parent_dir+cross_dir)
 
 ## Load in the variables
 start_time = time.perf_counter()
@@ -1098,18 +1701,20 @@ da_d02_cross_LH_cntl= xr.open_dataset('d02_cross_LH')['LH'].isel(Time=slice(time
 da_d02_cross_QFX_cntl= xr.open_dataset('d02_cross_QFX')['QFX'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
 # Water vapor [kg/kg]
 da_d02_cross_QV_cntl= xr.open_dataset('d02_cross_QV')['QV'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
-# Cloud water [kg/kg]
-da_d02_cross_QC_cntl= xr.open_dataset('d02_cross_QC')['QC'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
-# Rain water [kg/kg]
-da_d02_cross_QR_cntl= xr.open_dataset('d02_cross_QR')['QR'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
-# Ice water [kg/kg]
-da_d02_cross_QI_cntl= xr.open_dataset('d02_cross_QI')['QI'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
-# Snow water [kg/kg]
-da_d02_cross_QS_cntl= xr.open_dataset('d02_cross_QS')['QS'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
-# Graupel water [kg/kg]
-da_d02_cross_QG_cntl= xr.open_dataset('d02_cross_QG')['QG'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
+# # Cloud water [kg/kg]
+# da_d02_cross_QC_cntl= xr.open_dataset('d02_cross_QC')['QC'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
+# # Rain water [kg/kg]
+# da_d02_cross_QR_cntl= xr.open_dataset('d02_cross_QR')['QR'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
+# # Ice water [kg/kg]
+# da_d02_cross_QI_cntl= xr.open_dataset('d02_cross_QI')['QI'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
+# # Snow water [kg/kg]
+# da_d02_cross_QS_cntl= xr.open_dataset('d02_cross_QS')['QS'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
+# # Graupel water [kg/kg]
+# da_d02_cross_QG_cntl= xr.open_dataset('d02_cross_QG')['QG'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
+# # Total water [kg/kg]
+# da_d02_cross_QTotal_cntl= da_d02_cross_QV_cntl+da_d02_cross_QC_cntl+da_d02_cross_QR_cntl+da_d02_cross_QI_cntl+da_d02_cross_QS_cntl+da_d02_cross_QG_cntl
 # Total water [kg/kg]
-da_d02_cross_QTotal_cntl= da_d02_cross_QV_cntl+da_d02_cross_QC_cntl+da_d02_cross_QR_cntl+da_d02_cross_QI_cntl+da_d02_cross_QS_cntl+da_d02_cross_QG_cntl
+da_d02_cross_QTotal_cntl= xr.open_dataset('d02_cross_QTotal')['QTotal'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
 # Cloud Fraction [0->1]
 da_d02_cross_CLDFRA_cntl= xr.open_dataset('d02_cross_CLDFRA')['CLDFRA'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
 	# Low Cloud Fraction [1000-750 hPa]
@@ -1229,51 +1834,71 @@ da_d02_cross_NetSfcClear_cntl= da_d02_cross_LWSfcClear_cntl + da_d02_cross_SWSfc
 # Net Surface Cloud-Radiative Forcing [W/m^2]
 da_d02_cross_NetSfcCRF_cntl= da_d02_cross_NetSfc_cntl - da_d02_cross_NetSfcClear_cntl
 
-# If first time calculating the Integrated Atmospheric values, run the section of code below
-da_d02_cross_QTotal_cntl.name = 'QTotal'
-da_d02_cross_QTotal_cntl.to_netcdf(path='d02_cross_QTotal', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_LWAtm_cntl.name = 'LWAtm'
-da_d02_cross_LWAtm_cntl.to_netcdf(path='d02_cross_LWAtm', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_LWAtmClear_cntl.name = 'LWAtmClear'
-da_d02_cross_LWAtmClear_cntl.to_netcdf(path='d02_cross_LWAtmClear', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_SWAtm_cntl.name = 'SWAtm'
-da_d02_cross_SWAtm_cntl.to_netcdf(path='d02_cross_SWAtm', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_SWAtmClear_cntl.name = 'SWAtmClear'
-da_d02_cross_SWAtmClear_cntl.to_netcdf(path='d02_cross_SWAtmClear', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_NetAtm_cntl.name = 'NetAtm'
-da_d02_cross_NetAtm_cntl.to_netcdf(path='d02_cross_NetAtm', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_NetAtmClear_cntl.name = 'NetAtmClear'
-da_d02_cross_NetAtmClear_cntl.to_netcdf(path='d02_cross_NetAtmClear', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-da_d02_cross_NetAtmCRF_cntl.name = 'NetAtmCRF'
-da_d02_cross_NetAtmCRF_cntl.to_netcdf(path='d02_cross_NetAtmCRF', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+## Integrated Top of Atmosphere Cloud-radiative Forcing Calculations [W/m^2]
+# Longwave Top of Atmosphere Radiative Heating [W/m^2]
+da_d02_cross_LWToa_cntl= (da_d02_cross_LWDownToa_cntl-da_d02_cross_LWUpToa_cntl)
+# Longwave Top of Atmosphere Radiative Heating, Clear-sky [W/m^2]
+da_d02_cross_LWToaClear_cntl= (da_d02_cross_LWDownToaClear_cntl-da_d02_cross_LWUpToaClear_cntl)
+# Longwave Top of Atmosphere Cloud-Radiative Forcing [W/m^2]
+da_d02_cross_LWToaCRF_cntl= da_d02_cross_LWToa_cntl - da_d02_cross_LWToaClear_cntl
+# Shortwave Top of Atmosphere Radiative Heating [W/m^2]
+da_d02_cross_SWToa_cntl= (da_d02_cross_SWDownToa_cntl-da_d02_cross_SWUpToa_cntl)
+# Shortwave Top of Atmosphere Radiative Heating, Clear-sky [W/m^2]
+da_d02_cross_SWToaClear_cntl= (da_d02_cross_SWDownToaClear_cntl-da_d02_cross_SWUpToaClear_cntl)
+# Shortwave Top of Atmosphere Cloud-Radiative Forcing [W/m^2]
+da_d02_cross_SWToaCRF_cntl= da_d02_cross_SWToa_cntl - da_d02_cross_SWToaClear_cntl
+# Net Top of Atmosphere Radiative Heating [W/m^2]
+da_d02_cross_NetToa_cntl= da_d02_cross_LWToa_cntl + da_d02_cross_SWToa_cntl
+# Net Top of Atmosphere Radiative Heating, Clear-sky [W/m^2]
+da_d02_cross_NetToaClear_cntl= da_d02_cross_LWToaClear_cntl + da_d02_cross_SWToaClear_cntl
+# Net Top of Atmosphere Cloud-Radiative Forcing [W/m^2]
+da_d02_cross_NetToaCRF_cntl= da_d02_cross_NetToa_cntl - da_d02_cross_NetToaClear_cntl
+
+# # If first time calculating the Integrated Atmospheric values, run the section of code below
+# da_d02_cross_QTotal_cntl.name = 'QTotal'
+# da_d02_cross_QTotal_cntl.to_netcdf(path='d02_cross_QTotal', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_LWAtm_cntl.name = 'LWAtm'
+# da_d02_cross_LWAtm_cntl.to_netcdf(path='d02_cross_LWAtm', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_LWAtmClear_cntl.name = 'LWAtmClear'
+# da_d02_cross_LWAtmClear_cntl.to_netcdf(path='d02_cross_LWAtmClear', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_SWAtm_cntl.name = 'SWAtm'
+# da_d02_cross_SWAtm_cntl.to_netcdf(path='d02_cross_SWAtm', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_SWAtmClear_cntl.name = 'SWAtmClear'
+# da_d02_cross_SWAtmClear_cntl.to_netcdf(path='d02_cross_SWAtmClear', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_NetAtm_cntl.name = 'NetAtm'
+# da_d02_cross_NetAtm_cntl.to_netcdf(path='d02_cross_NetAtm', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_NetAtmClear_cntl.name = 'NetAtmClear'
+# da_d02_cross_NetAtmClear_cntl.to_netcdf(path='d02_cross_NetAtmClear', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# da_d02_cross_NetAtmCRF_cntl.name = 'NetAtmCRF'
+# da_d02_cross_NetAtmCRF_cntl.to_netcdf(path='d02_cross_NetAtmCRF', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 
 step1_time = time.perf_counter()
 print('Control cross-section data loaded \N{check mark}', step1_time-start_time, 'seconds')
 
-# Terrain	Takes about 3 min
-# Updated method on plotting terrain
-	# I take each line from the cross section, capture the surface pressure at each line,
-	# and then average it over all the lines to get the AVERAGE TERRAIN HEIGHT.)
-terrain_height_d02 = np.zeros([da_d02_cross_NormalWind_cntl.shape[0],da_d02_cross_NormalWind_cntl.shape[2],da_d02_cross_NormalWind_cntl.shape[3]])
-for i in range(int(len(da_d02_cross_NormalWind_cntl.Spread))):
-	for j in range(da_d02_cross_NormalWind_cntl.shape[0]):
-		terrain_height_d02[j,:,i] = da_d02_PSFC[j,...].interp(south_north=da_d02_cross_NormalWind_cntl.Lat[:,i], west_east=da_d02_cross_NormalWind_cntl.Lon[:,i], method="linear")
+# # Terrain	Takes about 3 min
+# # Updated method on plotting terrain
+# 	# I take each line from the cross section, capture the surface pressure at each line,
+# 	# and then average it over all the lines to get the AVERAGE TERRAIN HEIGHT.)
+# terrain_height_d02 = np.zeros([da_d02_cross_NormalWind_cntl.shape[0],da_d02_cross_NormalWind_cntl.shape[2],da_d02_cross_NormalWind_cntl.shape[3]])
+# for i in range(int(len(da_d02_cross_NormalWind_cntl.Spread))):
+# 	for j in range(da_d02_cross_NormalWind_cntl.shape[0]):
+# 		terrain_height_d02[j,:,i] = da_d02_PSFC[j,...].interp(south_north=da_d02_cross_NormalWind_cntl.Lat[:,i], west_east=da_d02_cross_NormalWind_cntl.Lon[:,i], method="linear")
 
-# Turn into dataArray
-d02_cross_PSFC = xr.DataArray(
-	data=terrain_height_d02,
-	dims=['Time','Distance','Spread'],
-	coords=dict(
-		Time=ds_d02.XTIME.values,
-		Distance=da_d02_cross_NormalWind_cntl.Distance.values,
-		Spread=da_d02_cross_NormalWind_cntl.Spread.values,
-		Lat=(['Distance','Spread'],da_d02_cross_NormalWind_cntl.Lat.values),
-		Lon=(['Distance','Spread'],da_d02_cross_NormalWind_cntl.Lon.values)
-	)
-)
+# # Turn into dataArray
+# d02_cross_PSFC = xr.DataArray(
+# 	data=terrain_height_d02,
+# 	dims=['Time','Distance','Spread'],
+# 	coords=dict(
+# 		Time=ds_d02.XTIME.values,
+# 		Distance=da_d02_cross_NormalWind_cntl.Distance.values,
+# 		Spread=da_d02_cross_NormalWind_cntl.Spread.values,
+# 		Lat=(['Distance','Spread'],da_d02_cross_NormalWind_cntl.Lat.values),
+# 		Lon=(['Distance','Spread'],da_d02_cross_NormalWind_cntl.Lon.values)
+# 	)
+# )
 # Name and save the dataArray
-d02_cross_PSFC.name = 'PSFC'
-d02_cross_PSFC.to_netcdf(path='d02_cross_PSFC', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# d02_cross_PSFC.name = 'PSFC'
+# d02_cross_PSFC.to_netcdf(path='d02_cross_PSFC', mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 d02_cross_PSFC = xr.open_dataset('d02_cross_PSFC')['PSFC'].isel(Time=slice(time_ind_d01[0],time_ind_d01[1])).compute()
 step2_time = time.perf_counter()
 print('Terrain data loaded \N{check mark}', step2_time-step1_time, 'seconds')
@@ -1288,14 +1913,19 @@ print('Terrain data loaded \N{check mark}', step2_time-step1_time, 'seconds')
 	# These dataarrays will hold x-amount of simulations and are created from the code above ^
 
 # cd into the directory with your cross-sectional datasets to make the file paths when using xr.open_dataset a lot shorter
-os.chdir('/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff/Borneo_northwest')
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff/'
+
+# cd into the specific cross-section directory
+os.chdir(parent_dir+cross_dir)
+
+# Sumatra_mid_central, Sumatra_northwest, Borneo_northwest
 
 ## Load in the variables
 start_time = time.perf_counter()
 # Normal Wind [m/s]
 da_d02_cross_NormalWind_CRFoff= xr.open_dataset('d02_cross_NormalWind_CRFoff')['NormalWind'].compute()
 # Vertical Wind [m/s]
-da_d02_cross_W_CRFoff= xr.open_dataset('d02_cross_W_CRFoff')['W'].compute()
+# da_d02_cross_W_CRFoff= xr.open_dataset('d02_cross_W_CRFoff')['W'].compute()
 # Rain Rate [mm/day]
 da_d02_cross_RR_CRFoff= xr.open_dataset('d02_cross_RR_CRFoff')['RR'].compute()
 # Upward Sensible Heat Flux @ Surface [W/m^2]
@@ -1306,16 +1936,16 @@ da_d02_cross_LH_CRFoff= xr.open_dataset('d02_cross_LH_CRFoff')['LH'].compute()
 da_d02_cross_QFX_CRFoff= xr.open_dataset('d02_cross_QFX_CRFoff')['QFX'].compute()
 # Water vapor [kg/kg]
 da_d02_cross_QV_CRFoff= xr.open_dataset('d02_cross_QV_CRFoff')['QV'].compute()
-# Cloud water [kg/kg]
-da_d02_cross_QC_CRFoff= xr.open_dataset('d02_cross_QC_CRFoff')['QC']
-# Rain water [kg/kg]
-da_d02_cross_QR_CRFoff= xr.open_dataset('d02_cross_QR_CRFoff')['QR']
-# Ice water [kg/kg]
-da_d02_cross_QI_CRFoff= xr.open_dataset('d02_cross_QI_CRFoff')['QI']
-# Snow water [kg/kg]
-da_d02_cross_QS_CRFoff= xr.open_dataset('d02_cross_QS_CRFoff')['QS']
-# Graupel water [kg/kg]
-da_d02_cross_QG_CRFoff= xr.open_dataset('d02_cross_QG_CRFoff')['QG']
+# # Cloud water [kg/kg]
+# da_d02_cross_QC_CRFoff= xr.open_dataset('d02_cross_QC_CRFoff')['QC']
+# # Rain water [kg/kg]
+# da_d02_cross_QR_CRFoff= xr.open_dataset('d02_cross_QR_CRFoff')['QR']
+# # Ice water [kg/kg]
+# da_d02_cross_QI_CRFoff= xr.open_dataset('d02_cross_QI_CRFoff')['QI']
+# # Snow water [kg/kg]
+# da_d02_cross_QS_CRFoff= xr.open_dataset('d02_cross_QS_CRFoff')['QS']
+# # Graupel water [kg/kg]
+# da_d02_cross_QG_CRFoff= xr.open_dataset('d02_cross_QG_CRFoff')['QG']
 # Total water [kg/kg]
 da_d02_cross_QTotal_CRFoff= xr.open_dataset('d02_cross_QTotal_CRFoff')['QTotal'].compute()
 # Cloud Fraction [0->1]
@@ -1387,6 +2017,14 @@ da_d02_cross_SWSfc_CRFoff= (da_d02_cross_SWDownSfc_CRFoff-da_d02_cross_SWUpSfc_C
 # Net Surface Radiative Heating [W/m^2]
 da_d02_cross_NetSfc_CRFoff= da_d02_cross_LWSfc_CRFoff + da_d02_cross_SWSfc_CRFoff
 
+## Integrated Top of Atmosphere Cloud-radiative Forcing Calculations [W/m^2]
+# Longwave Top of Atmosphere Radiative Heating [W/m^2]
+da_d02_cross_LWToa_CRFoff= (da_d02_cross_LWDownToa_CRFoff-da_d02_cross_LWUpToa_CRFoff)
+# Shortwave Top of Atmosphere Radiative Heating [W/m^2]
+da_d02_cross_SWToa_CRFoff= (da_d02_cross_SWDownToa_CRFoff-da_d02_cross_SWUpToa_CRFoff)
+# Net Top of Atmosphere Radiative Heating [W/m^2]
+da_d02_cross_NetToa_CRFoff= da_d02_cross_LWToa_CRFoff + da_d02_cross_SWToa_CRFoff
+
 
 step1_time = time.perf_counter()
 print('CRF-off simulation cross-section data loaded \N{check mark}', step1_time-start_time, 'seconds')
@@ -1406,118 +2044,121 @@ print('CRF-off simulation cross-section data loaded \N{check mark}', step1_time-
 # In[ ]:
 
 
-def save_ens_cross_data(parent_dir,var_list,num_sims,sim_time_length):
-	for i in var_list:		# Loop through the variables
+# def save_ens_cross_data(parent_dir,cross_dir,var_list,num_sims,sim_time_length):
+# 	for i in var_list:		# Loop through the variables
 
-		# Create the pathname based on the variable, then save the ensemble cross-sectional data as an .nc file
-		file_names = sorted(glob.glob(parent_dir + '/2015*/L3/Borneo_northwest/d02_cross_' + i))
+# 		# Create the pathname based on the variable, then save the ensemble cross-sectional data as an .nc file
+# 		file_names = sorted(glob.glob(parent_dir + '/2015*/L3/'+ cross_dir + '/d02_cross_' + i))
 
-		# Open the multiple files, and concat them over the Time dimension
-		da = xr.open_mfdataset(file_names, concat_dim='Time', combine='nested', data_vars='all', coords='all')[i]	# Only grab the variable from var_list
+# 		# Open the multiple files, and concat them over the Time dimension
+# 		da = xr.open_mfdataset(file_names, concat_dim='Time', combine='nested', data_vars='all', coords='all')[i]	# Only grab the variable from var_list
 
-		# Is data 3-D or 2-D?
-		if 'bottom_top' in da.dims:		# If the dataset is 3-D
-			# Use numpy to reshape the data into dimensions of [num_sims X time X height X line_length X #_of_lines]
-				# This is needed since da Time dimension is the length of each simulation * num_sims
-			da_np = np.reshape(da.values, (num_sims, sim_time_length, len(da.bottom_top), len(da.Distance), len(da.Spread)))
-			# Create a new dataArray that holds da_np
-			da = xr.DataArray(
-				name=i,
-				data=da_np,
-				dims=['Lead','Time','bottom_top','Distance','Spread'],
-				coords=dict(
-					Lead = np.arange(0,num_sims,1),
-					EnsTime = (['Lead','Time'], da.Time.values.reshape(num_sims,sim_time_length)),
-					bottom_top = da.bottom_top.values,
-					Distance = da.Distance.values,
-					Spread = da.Spread.values,
-					Lat = (['Time','Distance','Spread'], da.Lat.values[:sim_time_length,:,:]),
-					Lon = (['Time','Distance','Spread'], da.Lon.values[:sim_time_length,:,:])
-					)
-			)
-			# Transpose to the way you want the dims to be ordered
-			da = da.transpose('Time','bottom_top','Distance','Spread','Lead')
+# 		# Is data 3-D or 2-D?
+# 		if 'bottom_top' in da.dims:		# If the dataset is 3-D
+# 			# Use numpy to reshape the data into dimensions of [num_sims X time X height X line_length X #_of_lines]
+# 				# This is needed since da Time dimension is the length of each simulation * num_sims
+# 			da_np = np.reshape(da.values, (num_sims, sim_time_length, len(da.bottom_top), len(da.Distance), len(da.Spread)))
+# 			# Create a new dataArray that holds da_np
+# 			da = xr.DataArray(
+# 				name=i,
+# 				data=da_np,
+# 				dims=['Lead','Time','bottom_top','Distance','Spread'],
+# 				coords=dict(
+# 					Lead = np.arange(0,num_sims,1),
+# 					EnsTime = (['Lead','Time'], da.Time.values.reshape(num_sims,sim_time_length)),
+# 					bottom_top = da.bottom_top.values,
+# 					Distance = da.Distance.values,
+# 					Spread = da.Spread.values,
+# 					Lat = (['Time','Distance','Spread'], da.Lat.values[:sim_time_length,:,:]),
+# 					Lon = (['Time','Distance','Spread'], da.Lon.values[:sim_time_length,:,:])
+# 					)
+# 			)
+# 			# Transpose to the way you want the dims to be ordered
+# 			da = da.transpose('Time','bottom_top','Distance','Spread','Lead')
 
-		else:	# If the dataset is 2-D
-			# Use numpy to reshape the data into dimensions of [num_sims X time X line_length X #_of_lines]
-				# This is needed since da Time dimension is the length of each simulation * num_sims
-			da_np = np.reshape(da.values, (num_sims, sim_time_length, len(da.Distance), len(da.Spread)))
-			# Create a new dataArray that holds da_np
-			da = xr.DataArray(
-				name=i,
-				data=da_np,
-				dims=['Lead','Time','Distance','Spread'],
-				coords=dict(
-					Lead = np.arange(0,num_sims,1),
-					EnsTime = (['Lead','Time'], da.Time.values.reshape(num_sims,sim_time_length)),
-					Distance = da.Distance.values,
-					Spread = da.Spread.values,
-					Lat = (['Time','Distance','Spread'], da.Lat.values[:sim_time_length,:,:]),
-					Lon = (['Time','Distance','Spread'], da.Lon.values[:sim_time_length,:,:])
-					)
-			)
-			# Transpose to the way you want the dims to be ordered
-			da = da.transpose('Time','Distance','Spread','Lead')
-		# Where you'd like to save the dataset as an .nc file
-		path_name = parent_dir + '/Borneo_northwest/d02_cross_' + i + '_CRFoff'
-		da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
-		print(i + ' has been saved.')
-	return
+# 		else:	# If the dataset is 2-D
+# 			# Use numpy to reshape the data into dimensions of [num_sims X time X line_length X #_of_lines]
+# 				# This is needed since da Time dimension is the length of each simulation * num_sims
+# 			da_np = np.reshape(da.values, (num_sims, sim_time_length, len(da.Distance), len(da.Spread)))
+# 			# Create a new dataArray that holds da_np
+# 			da = xr.DataArray(
+# 				name=i,
+# 				data=da_np,
+# 				dims=['Lead','Time','Distance','Spread'],
+# 				coords=dict(
+# 					Lead = np.arange(0,num_sims,1),
+# 					EnsTime = (['Lead','Time'], da.Time.values.reshape(num_sims,sim_time_length)),
+# 					Distance = da.Distance.values,
+# 					Spread = da.Spread.values,
+# 					Lat = (['Time','Distance','Spread'], da.Lat.values[:sim_time_length,:,:]),
+# 					Lon = (['Time','Distance','Spread'], da.Lon.values[:sim_time_length,:,:])
+# 					)
+# 			)
+# 			# Transpose to the way you want the dims to be ordered
+# 			da = da.transpose('Time','Distance','Spread','Lead')
+# 		# Where you'd like to save the dataset as an .nc file
+# 		path_name = parent_dir + '/' + cross_dir +'/d02_cross_' + i + '_CRFoff'
+# 		da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# 		print(i + ' has been saved.')
+# 	return
 
-# Directory where all the simulation sub-directories are kept
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# # Directory where all the simulation sub-directories are kept
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# # List of variables that you would like saved
+# var_list = ['NormalWind','QFX', 'HFX', 'T2', 'PSFC', 'LH', 'CLDFRA', 'H_DIABATIC', 'Theta','CAPE','CIN', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'LWAll', 'SWAll', 'RR', 'LWDNB', 'LWUPB', 'LWDNT', 'LWUPT', 'SWDNB', 'SWUPB', 'SWDNT', 'SWUPT']
+# # var_list = ['?']
+# num_sims = 18			# How many sims
+# sim_time_length = 36	# How many time steps each sim (all sims should have the same time length)
 
-# List of variables that you would like saved
-var_list = ['NormalWind','QFX', 'HFX', 'T2', 'PSFC', 'LH', 'CLDFRA', 'H_DIABATIC', 'Theta','CAPE','CIN', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'LWAll', 'SWAll', 'RR', 'LWDNB', 'LWUPB', 'LWDNT', 'LWUPT', 'SWDNB', 'SWUPB', 'SWDNT', 'SWUPT']
-# var_list = ['CAPE','CIN']
+# cross_dir = 'Sumatra_mid_central', 'Sumatra_northwest', 'Borneo_northwest'
 
-num_sims = 18			# How many sims
-sim_time_length = 36	# How many time steps each sim (all sims should have the same time length)
-save_ens_cross_data(parent_dir,var_list,num_sims,sim_time_length)
+# save_ens_cross_data(parent_dir, cross_dir, var_list, num_sims, sim_time_length)
 
-################################################################
-################ Save the rest of the variables ################
-################################################################
+# ################################################################
+# ################ Save the rest of the variables ################
+# ################################################################
 
-# Calculate cross-sectional data and save them as .nc files
-	# QTotal, LWAtm, LWAtmClear, SWAtm, SWAtmClear, NetAtm, NetAtmClear, NetAtmCRF
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff/Borneo_northwest' 
+# # Calculate cross-sectional data and save them as .nc files
+# 	# QTotal, LWAtm, LWAtmClear, SWAtm, SWAtmClear, NetAtm, NetAtmClear, NetAtmCRF
+# cross_dir = 'Sumatra_northwest'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff/' 
+# target_dir = parent_dir + cross_dir
 
-## QTotal ##
-file_names = sorted(glob.glob(parent_dir + '/d02_cross_Q*'))
-# Sum all the Q's
-da = xr.open_dataset(file_names[0])['QC'] + xr.open_dataset(file_names[2])['QG'] + xr.open_dataset(file_names[3])['QI'] + xr.open_dataset(file_names[4])['QR'] + xr.open_dataset(file_names[5])['QS'] + xr.open_dataset(file_names[6])['QV']
-da.name = 'QTotal'
-# Save the file
-path_name = parent_dir + '/d02_cross_QTotal_CRFoff'
-da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# ## QTotal ##
+# file_names = sorted(glob.glob(target_dir + '/d02_cross_Q*'))
+# # Sum all the Q's
+# da = xr.open_dataset(file_names[0])['QC'] + xr.open_dataset(file_names[2])['QG'] + xr.open_dataset(file_names[3])['QI'] + xr.open_dataset(file_names[4])['QR'] + xr.open_dataset(file_names[5])['QS'] + xr.open_dataset(file_names[6])['QV']
+# da.name = 'QTotal'
+# # Save the file
+# path_name = target_dir + '/d02_cross_QTotal_CRFoff'
+# da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 
-# No need to calculate Clear values and CRF because icloud=0 so values are already Clear
-## LWAtm ##
-da = (xr.open_dataset(parent_dir+'/d02_cross_LWDNT_CRFoff')['LWDNT']-xr.open_dataset(parent_dir+'/d02_cross_LWUPT_CRFoff')['LWUPT']) + (xr.open_dataset(parent_dir+'/d02_cross_LWUPB_CRFoff')['LWUPB']-xr.open_dataset(parent_dir+'/d02_cross_LWDNB_CRFoff')['LWDNB'])
-da.name = 'LWAtm'
-path_name = parent_dir + '/d02_cross_LWAtm_CRFoff'
-da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# # No need to calculate Clear values and CRF because icloud=0 so values are already Clear
+# ## LWAtm ##
+# da = (xr.open_dataset(target_dir +'/d02_cross_LWDNT_CRFoff')['LWDNT']-xr.open_dataset(target_dir+'/d02_cross_LWUPT_CRFoff')['LWUPT']) + (xr.open_dataset(target_dir+'/d02_cross_LWUPB_CRFoff')['LWUPB']-xr.open_dataset(target_dir+'/d02_cross_LWDNB_CRFoff')['LWDNB'])
+# da.name = 'LWAtm'
+# path_name = target_dir + '/d02_cross_LWAtm_CRFoff'
+# da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 
-## SWAtm ##
-da = (xr.open_dataset(parent_dir+'/d02_cross_SWDNT_CRFoff')['SWDNT']-xr.open_dataset(parent_dir+'/d02_cross_SWUPT_CRFoff')['SWUPT']) + (xr.open_dataset(parent_dir+'/d02_cross_SWUPB_CRFoff')['SWUPB']-xr.open_dataset(parent_dir+'/d02_cross_SWDNB_CRFoff')['SWDNB'])
-da.name = 'SWAtm'
-path_name = parent_dir + '/d02_cross_SWAtm_CRFoff'
-da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# ## SWAtm ##
+# da = (xr.open_dataset(target_dir +'/d02_cross_SWDNT_CRFoff')['SWDNT']-xr.open_dataset(target_dir+'/d02_cross_SWUPT_CRFoff')['SWUPT']) + (xr.open_dataset(target_dir+'/d02_cross_SWUPB_CRFoff')['SWUPB']-xr.open_dataset(target_dir+'/d02_cross_SWDNB_CRFoff')['SWDNB'])
+# da.name = 'SWAtm'
+# path_name = target_dir + '/d02_cross_SWAtm_CRFoff'
+# da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 
-## NetAtm ##
-da = xr.open_dataset(parent_dir+'/d02_cross_LWAtm_CRFoff')['LWAtm'] + xr.open_dataset(parent_dir+'/d02_cross_SWAtm_CRFoff')['SWAtm'] 
-da.name = 'NetAtm'
-path_name = parent_dir + '/d02_cross_NetAtm_CRFoff'
-da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# ## NetAtm ##
+# da = xr.open_dataset(target_dir +'/d02_cross_LWAtm_CRFoff')['LWAtm'] + xr.open_dataset(target_dir+'/d02_cross_SWAtm_CRFoff')['SWAtm'] 
+# da.name = 'NetAtm'
+# path_name = target_dir + '/d02_cross_NetAtm_CRFoff'
+# da.to_netcdf(path=path_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
 
 
 # ## Sensitivity testing data
 
-# In[20]:
+# In[ ]:
 
 
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26'
 
 # # 3-D Variables
 
@@ -1828,7 +2469,7 @@ parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajari
 
 # Western Central Sumatra cross-sectional view
 
-# In[40]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(9.75,6.75))
@@ -1866,16 +2507,170 @@ cf1 = x.plot.contourf(
 )
 
 # Plot the individual cross-sectioned lines
-for i in range(int(da_d02_cross_NormalWind_cntl.shape[3])):
+for i in range(4,int(da_d02_cross_NormalWind_cntl.shape[3])):
 	plt.plot(da_d02_cross_NormalWind_cntl.Lon[:,i],da_d02_cross_NormalWind_cntl.Lat[:,i],'r',linewidth=0.5)
 # Plot the center line
 plt.plot(da_d02_cross_NormalWind_cntl.Lon[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],da_d02_cross_NormalWind_cntl.Lat[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],'r',linewidth=1)
 # Plot the grid resolution
 plt.scatter(da_d02_cross_NormalWind_cntl.Lon[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],da_d02_cross_NormalWind_cntl.Lat[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],s=3)
-# Plot the off-shore radar (R/V Mirai of JAMSTEC)
-RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='r', label='R/V Mirai')
-# Plot the on-shore observatory in Bengkulu city (BMKG observatory)
-BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='r', label='BMKG Observatory')
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='r', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='r', label='BMKG Observatory')
+
+# # Plot Assumed Coastline
+plt.scatter(da_d02_cross_NormalWind_cntl.Lon[np.where(da_d02_cross_NormalWind_cntl.Distance==0)],da_d02_cross_NormalWind_cntl.Lat[np.where(da_d02_cross_NormalWind_cntl.Distance==0)],s=3)
+
+
+# Plot the individual cross-sectioned lines
+for i in range(int(da_d02_cross_NormalWind_cntl_old.shape[3])-4):
+	plt.plot(da_d02_cross_NormalWind_cntl_old.Lon[:,i],da_d02_cross_NormalWind_cntl_old.Lat[:,i],'k',linewidth=0.5)
+# Plot the center line
+plt.plot(da_d02_cross_NormalWind_cntl_old.Lon[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],da_d02_cross_NormalWind_cntl_old.Lat[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(da_d02_cross_NormalWind_cntl_old.Lon[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],da_d02_cross_NormalWind_cntl_old.Lat[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],s=3)
+
+# Plot Assumed Coastline
+plt.scatter(da_d02_cross_NormalWind_cntl_old.Lon[np.where(da_d02_cross_NormalWind_cntl_old.Distance==0)],da_d02_cross_NormalWind_cntl_old.Lat[np.where(da_d02_cross_NormalWind_cntl_old.Distance==0)],s=3)
+
+
+cbar=cf1.colorbar
+cbar.set_label('Terrain Height [m]',fontsize=fs)
+cbar.set_ticks([0,10,100,1000,2000,3000])
+cbar.minorticks_off()
+cbar.set_ticklabels([0,10,100,1000,2000,3000],fontsize=fs)
+
+ax1.set_xlabel('',fontsize=18)
+ax1.set_ylabel('',fontsize=18)
+ax1.set_title('Western Central Sumatra',fontsize=fs+4)
+# ax1.set_xticks(x_ticks)
+# ax1.set_xticklabels(x_tick_labels,fontsize=fs)
+# ax1.set_yticks(y_ticks)
+# ax1.set_yticklabels(y_tick_labels,fontsize=fs)
+ax1.legend(fontsize='x-large', markerscale=1.7, edgecolor='0')
+# fig.savefig('/home/hragnajarian/PhD/plots/Domain_cross.png', transparent=True)
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(9.75,6.75))
+gs = gridspec.GridSpec(nrows=1, ncols=1, hspace=0.075)
+fs = 18
+d02_coords = dict(
+    south_north=('south_north',ds_d02.XLAT[0,:,0].values),
+    west_east=('west_east',ds_d02.XLONG[0,0,:].values)
+    )
+# Prepare the Terrain Height    [m]
+da_d02_TOPO = ds_d02['HGT'].sel(Time=slice(1)).compute().squeeze()
+x = da_d02_TOPO.assign_coords(d02_coords)
+lat = [da_d02_cross_NormalWind_cntl_old.Lat.min()-0.5, da_d02_cross_NormalWind_cntl_old.Lat.max()+0.5]
+lon = [da_d02_cross_NormalWind_cntl_old.Lon.min()-0.5, da_d02_cross_NormalWind_cntl_old.Lon.max()+0.5]
+
+# Yokoi et al. 2017-2019 domain:
+x = x.sel(
+	south_north=slice(lat[0],lat[1]),
+	west_east=slice(lon[0],lon[1]))
+
+# x_ticks = np.array([100,102,104])
+# x_tick_labels = [u'100\N{DEGREE SIGN}E',
+#                  u'102\N{DEGREE SIGN}E', u'104\N{DEGREE SIGN}E']
+# y_ticks = np.array([-6,-4,-2])
+# y_tick_labels = [u'6\N{DEGREE SIGN}S',
+#                  u'4\N{DEGREE SIGN}S', u'2\N{DEGREE SIGN}S']
+
+# Plot your terrain
+ax1 = fig.add_subplot(gs[0,0])
+cf1 = x.plot.contourf(
+	cmap='terrain',
+	# levels=np.arange(0,4250,250),
+	levels = np.append(0,np.logspace(0,3.65,50)),
+
+)
+
+# Plot the individual cross-sectioned lines
+for i in range(int(da_d02_cross_NormalWind_cntl_old.shape[3])):
+	plt.plot(da_d02_cross_NormalWind_cntl_old.Lon[:,i],da_d02_cross_NormalWind_cntl_old.Lat[:,i],'r',linewidth=0.5)
+# Plot the center line
+plt.plot(da_d02_cross_NormalWind_cntl_old.Lon[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],da_d02_cross_NormalWind_cntl_old.Lat[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],'r',linewidth=1)
+# Plot the grid resolution
+plt.scatter(da_d02_cross_NormalWind_cntl_old.Lon[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],da_d02_cross_NormalWind_cntl_old.Lat[:,int(da_d02_cross_NormalWind_cntl_old.shape[3]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='r', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='r', label='BMKG Observatory')
+
+# Plot Assumed Coastline
+plt.scatter(da_d02_cross_NormalWind_cntl_old.Lon[np.where(da_d02_cross_NormalWind_cntl_old.Distance==0)],da_d02_cross_NormalWind_cntl_old.Lat[np.where(da_d02_cross_NormalWind_cntl_old.Distance==0)],s=3)
+
+cbar=cf1.colorbar
+cbar.set_label('Terrain Height [m]',fontsize=fs)
+cbar.set_ticks([0,10,100,1000,2000,3000])
+cbar.minorticks_off()
+cbar.set_ticklabels([0,10,100,1000,2000,3000],fontsize=fs)
+
+ax1.set_xlabel('',fontsize=18)
+ax1.set_ylabel('',fontsize=18)
+ax1.set_title('Western Central Sumatra',fontsize=fs+4)
+# ax1.set_xticks(x_ticks)
+# ax1.set_xticklabels(x_tick_labels,fontsize=fs)
+# ax1.set_yticks(y_ticks)
+# ax1.set_yticklabels(y_tick_labels,fontsize=fs)
+ax1.legend(fontsize='x-large', markerscale=1.7, edgecolor='0')
+# fig.savefig('/home/hragnajarian/PhD/plots/Domain_cross.png', transparent=True)
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(9.75,6.75))
+gs = gridspec.GridSpec(nrows=1, ncols=1, hspace=0.075)
+fs = 18
+d02_coords = dict(
+    south_north=('south_north',ds_d02.XLAT[0,:,0].values),
+    west_east=('west_east',ds_d02.XLONG[0,0,:].values)
+    )
+# Prepare the Terrain Height    [m]
+da_d02_TOPO = ds_d02['HGT'].sel(Time=slice(1)).compute().squeeze()
+x = da_d02_TOPO.assign_coords(d02_coords)
+lat = [da_d02_cross_NormalWind_CRFoff.Lat.min()-0.5, da_d02_cross_NormalWind_CRFoff.Lat.max()+0.5]
+lon = [da_d02_cross_NormalWind_CRFoff.Lon.min()-0.5, da_d02_cross_NormalWind_CRFoff.Lon.max()+0.5]
+
+# Yokoi et al. 2017-2019 domain:
+x = x.sel(
+	south_north=slice(lat[0],lat[1]),
+	west_east=slice(lon[0],lon[1]))
+
+# x_ticks = np.array([100,102,104])
+# x_tick_labels = [u'100\N{DEGREE SIGN}E',
+#                  u'102\N{DEGREE SIGN}E', u'104\N{DEGREE SIGN}E']
+# y_ticks = np.array([-6,-4,-2])
+# y_tick_labels = [u'6\N{DEGREE SIGN}S',
+#                  u'4\N{DEGREE SIGN}S', u'2\N{DEGREE SIGN}S']
+
+# Plot your terrain
+ax1 = fig.add_subplot(gs[0,0])
+cf1 = x.plot.contourf(
+	cmap='terrain',
+	# levels=np.arange(0,4250,250),
+	levels = np.append(0,np.logspace(0,3.65,50)),
+
+)
+
+# Plot the individual cross-sectioned lines
+for i in range(int(da_d02_cross_NormalWind_CRFoff.shape[3])):
+	plt.plot(da_d02_cross_NormalWind_CRFoff.Lon[0,:,i],da_d02_cross_NormalWind_CRFoff.Lat[0,:,i],'r',linewidth=0.5)
+# Plot the center line
+plt.plot(da_d02_cross_NormalWind_CRFoff.Lon[0,:,int(da_d02_cross_NormalWind_CRFoff.shape[3]/2)],da_d02_cross_NormalWind_CRFoff.Lat[0,:,int(da_d02_cross_NormalWind_CRFoff.shape[3]/2)],'r',linewidth=1)
+# Plot the grid resolution
+plt.scatter(da_d02_cross_NormalWind_CRFoff.Lon[0,:,int(da_d02_cross_NormalWind_CRFoff.shape[3]/2)],da_d02_cross_NormalWind_CRFoff.Lat[0,:,int(da_d02_cross_NormalWind_CRFoff.shape[3]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='r', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='r', label='BMKG Observatory')
+
+# Plot Assumed Coastline
+plt.scatter(da_d02_cross_NormalWind_CRFoff.Lon[0][np.where(da_d02_cross_NormalWind_CRFoff.Distance==0)],da_d02_cross_NormalWind_CRFoff.Lat[0][np.where(da_d02_cross_NormalWind_CRFoff.Distance==0)])
 
 cbar=cf1.colorbar
 cbar.set_label('Terrain Height [m]',fontsize=fs)
@@ -1896,7 +2691,7 @@ ax1.legend(fontsize='x-large', markerscale=1.7, edgecolor='0')
 
 # North Western Sumatra cross-sectional view
 
-# In[33]:
+# In[ ]:
 
 
 # cross_section_multi(da, start_coord, end_coord, width, dx)
@@ -1909,7 +2704,7 @@ dx 				= 0.025
 da_cross_temp, all_line_coords = cross_section_multi(da_d01_RR, start_coord, end_coord, width, dx)
 
 
-# In[34]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(9.75,6.75))
@@ -1975,7 +2770,7 @@ ax1.set_yticklabels(y_tick_labels,fontsize=fs)
 
 # North Western Borneo cross-sectional view
 
-# In[35]:
+# In[ ]:
 
 
 # cross_section_multi(da, start_coord, end_coord, width, dx)
@@ -1989,7 +2784,7 @@ da_cross_temp, all_line_coords = cross_section_multi(da_d01_RR, start_coord, end
 da_cross_temp.shape
 
 
-# In[36]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(9.75,6.75))
@@ -2056,7 +2851,20 @@ ax1.set_yticklabels(y_tick_labels,fontsize=fs)
 
 # All three cross sections
 
-# In[44]:
+# In[28]:
+
+
+d01_coords = dict(
+    XLAT=(('Time','south_north','west_east'),ds_d01.XLAT[0:2].values),
+    XLONG=(('Time','south_north','west_east'),ds_d01.XLONG[0:2].values),
+    bottom_top=(('bottom_top'),interp_P_levels),
+    Time=('Time',ds_d01.XTIME.values[0:2]),
+    south_north=(('south_north'),ds_d01.XLAT[0,:,0].values),
+    west_east=(('west_east'),ds_d01.XLONG[0,0,:].values)
+    )
+
+
+# In[29]:
 
 
 # Western Central Sumatra
@@ -2066,7 +2874,9 @@ width			= 1.5
 dx 				= 0.025
 theta1           = calculate_angle_between_points(start_coord, end_coord)    # Degrees
 # da_cross_temp1, all_line_coords1 = cross_section_multi(da_d01_RR, start_coord, end_coord, width, dx)
-da_cross_temp1, all_line_coords1 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 253}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
+# da_cross_temp1, all_line_coords1 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 216}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
+
+da_cross_temp1, all_line_coords1 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 2}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
 
 # North West Sumatra
 start_coord		= [5.2,96.4]
@@ -2075,7 +2885,9 @@ width			= 1.5
 dx 				= 0.025
 theta2           = calculate_angle_between_points(start_coord, end_coord)    # Degrees
 # da_cross_temp2, all_line_coords2 = cross_section_multi(da_d01_RR, start_coord, end_coord, width, dx)
-da_cross_temp2, all_line_coords2 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 253}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
+# da_cross_temp2, all_line_coords2 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 1}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
+
+da_cross_temp2, all_line_coords2 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 2}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
 
 # North West Borneo
 start_coord		= [1.2,112.8]
@@ -2084,19 +2896,21 @@ width			= 1.5
 dx 				= 0.025
 theta3           = calculate_angle_between_points(start_coord, end_coord)    # Degrees
 # da_cross_temp3, all_line_coords3 = cross_section_multi(da_d01_RR, start_coord, end_coord, width, dx)
-da_cross_temp3, all_line_coords3 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 253}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
+da_cross_temp3, all_line_coords3 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 2}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
+
+da_cross_temp3, all_line_coords3 = cross_section_multi(da_d01_LANDMASK.expand_dims(dim={'Time': 2}).assign_coords(without_keys(d01_coords,'bottom_top')), start_coord, end_coord, width, dx)
 
 
-# In[45]:
+# In[ ]:
 
 
 # Create distance coordinate
 distance_d01 = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp1.shape[-2])
 mid_cross_ind = int(da_cross_temp1.shape[2]/2)	# Find middle cross-section index
-if da_cross_temp1[0,0,mid_cross_ind]==0:     # Figure out if the start is over land or ocean
-	coast_ind = np.where(da_cross_temp1[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
-else:
+if da_cross_temp1[0,0,mid_cross_ind]==1:     # Figure out if the start is over land or ocean
 	coast_ind = np.where(da_cross_temp1[0,:,mid_cross_ind]==0)[0][0]	# First 0 (land->ocean)
+else:
+	coast_ind = np.where(da_cross_temp1[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
 distance_d01_1 = distance_d01 - distance_d01[coast_ind]   # Negative values is land
 
 # Create distance coordinate
@@ -2111,10 +2925,10 @@ distance_d01_2 = distance_d01 - distance_d01[coast_ind]   # Negative values is l
 # Create distance coordinate
 distance_d01 = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp3.shape[-2])
 mid_cross_ind = int(da_cross_temp3.shape[2]/2)	# Find middle cross-section index
-if da_cross_temp3[0,0,mid_cross_ind]==0:     # Figure out if the start is over land or ocean
-	coast_ind = np.where(da_cross_temp3[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
-else:
+if da_cross_temp3[0,0,mid_cross_ind]==1:     # Figure out if the start is over land or ocean
 	coast_ind = np.where(da_cross_temp3[0,:,mid_cross_ind]==0)[0][0]	# First 0 (land->ocean)
+else:
+	coast_ind = np.where(da_cross_temp3[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
 distance_d01_3 = distance_d01 - distance_d01[coast_ind]   # Negative values is land
 
 a = len(distance_d01_1)-np.where(distance_d01_1==0)[0][0]
@@ -2128,38 +2942,7 @@ print(len(distance_d01_1), len(distance_d01_2), len(distance_d01_3))
 print(degrees(theta1), degrees(theta2), degrees(theta3))
 
 
-# In[48]:
-
-
-# Create distance coordinate
-distance_d01 = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp2.shape[-2])
-mid_cross_ind = int(da_cross_temp2.shape[2]/2)	# Find middle cross-section index
-if da_cross_temp2[0,0,mid_cross_ind]==1:     # Figure out if the start is over land or ocean
-	coast_ind = np.where(da_cross_temp2[0,:,mid_cross_ind]==0)[0][0]	# First 0 (land->ocean)
-else:
-	coast_ind = np.where(da_cross_temp2[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
-distance_d01_2 = distance_d01 - distance_d01[coast_ind]   # Negative values is land
-
-
-# In[58]:
-
-
-da_cross_temp2[0,0,mid_cross_ind]
-
-
-# In[56]:
-
-
-da_cross_temp2[0,:,mid_cross_ind]
-
-
-# In[57]:
-
-
-np.where(da_cross_temp2[0,:,mid_cross_ind]==0)
-
-
-# In[46]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(16,6.75))
@@ -2238,6 +3021,8 @@ ax1.legend(fontsize='x-large', markerscale=1.7, edgecolor='0')
 # fig.savefig('/home/hragnajarian/PhD/plots/Domain_cross.png', transparent=True)
 
 
+# Cross Section Domain
+
 # In[ ]:
 
 
@@ -2251,20 +3036,19 @@ d02_coords = dict(
 # Prepare the Terrain Height    [m]
 da_d02_TOPO = ds_d02['HGT'].sel(Time=slice(1)).compute().squeeze()
 x = da_d02_TOPO.assign_coords(d02_coords)
-lat = [da_d02_cross_NormalWind_cntl.Lat.min()-0.5, da_d02_cross_NormalWind_cntl.Lat.max()+0.5]
-lon = [da_d02_cross_NormalWind_cntl.Lon.min()-0.5, da_d02_cross_NormalWind_cntl.Lon.max()+0.5]
+lat = [da_d02_cross_RR_cntl.Lat.min()-0.5, da_d02_cross_RR_cntl.Lat.max()+0.5]
+lon = [da_d02_cross_RR_cntl.Lon.min()-0.5, da_d02_cross_RR_cntl.Lon.max()+0.5]
 
 # Yokoi et al. 2017-2019 domain:
 x = x.sel(
 	south_north=slice(lat[0],lat[1]),
 	west_east=slice(lon[0],lon[1]))
 
-x_ticks = np.array([100,102,104])
-x_tick_labels = [u'100\N{DEGREE SIGN}E',
-                 u'102\N{DEGREE SIGN}E', u'104\N{DEGREE SIGN}E']
-y_ticks = np.array([-6,-4,-2])
-y_tick_labels = [u'6\N{DEGREE SIGN}S',
-                 u'4\N{DEGREE SIGN}S', u'2\N{DEGREE SIGN}S']
+x_ticks = np.arange(int(np.floor(lon[0])),int(np.ceil(lon[1])),2)
+x_tick_labels = degree_labels(x_ticks, 'lon')
+
+y_ticks = np.arange(int(np.floor(lat[0])),int(np.ceil(lat[1])),2)
+y_tick_labels = degree_labels(y_ticks, 'lat')
 
 # Plot your terrain
 ax1 = fig.add_subplot(gs[0,0])
@@ -2272,20 +3056,28 @@ cf1 = x.plot.contourf(
 	cmap='terrain',
 	# levels=np.arange(0,4250,250),
 	levels = np.append(0,np.logspace(0,3.65,50)),
-
 )
 
 # Plot the individual cross-sectioned lines
-for i in range(int(da_d02_cross_NormalWind_cntl.shape[3])):
-	plt.plot(da_d02_cross_NormalWind_cntl.Lon[:,i],da_d02_cross_NormalWind_cntl.Lat[:,i],'r',linewidth=0.5)
+for i in range(int(da_d02_cross_RR_cntl.shape[2])):
+	plt.plot(da_d02_cross_RR_cntl.Lon[:,i],da_d02_cross_RR_cntl.Lat[:,i],'r',linewidth=0.5)
 # Plot the center line
-plt.plot(da_d02_cross_NormalWind_cntl.Lon[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],da_d02_cross_NormalWind_cntl.Lat[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],'r',linewidth=1)
+plt.plot(da_d02_cross_RR_cntl.Lon[:,int(da_d02_cross_RR_cntl.shape[2]/2)],da_d02_cross_RR_cntl.Lat[:,int(da_d02_cross_RR_cntl.shape[2]/2)],'r',linewidth=1)
 # Plot the grid resolution
-plt.scatter(da_d02_cross_NormalWind_cntl.Lon[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],da_d02_cross_NormalWind_cntl.Lat[:,int(da_d02_cross_NormalWind_cntl.shape[3]/2)],s=3)
-# Plot the off-shore radar (R/V Mirai of JAMSTEC)
-RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='r', label='R/V Mirai')
-# Plot the on-shore observatory in Bengkulu city (BMKG observatory)
-BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='r', label='BMKG Observatory')
+plt.scatter(da_d02_cross_RR_cntl.Lon[:,int(da_d02_cross_RR_cntl.shape[2]/2)],da_d02_cross_RR_cntl.Lat[:,int(da_d02_cross_RR_cntl.shape[2]/2)],s=3)
+
+# Plot Assumed Coastline
+plt.scatter(da_d02_cross_RR_cntl.Lon[np.where(da_d02_cross_RR_cntl.Distance==0)],da_d02_cross_RR_cntl.Lat[np.where(da_d02_cross_RR_cntl.Distance==0)],s=2, label='Assumed Coastline')
+
+# Plot Distance away from coast
+ind = -15
+dist = np.round(da_d02_cross_RR_cntl.Distance[np.where(da_d02_cross_RR_cntl.Distance==0)[0]+(ind)].values,1)
+plt.scatter(da_d02_cross_RR_cntl.Lon[np.where(da_d02_cross_RR_cntl.Distance==0)[0]+(ind)],da_d02_cross_RR_cntl.Lat[np.where(da_d02_cross_RR_cntl.Distance==0)[0]+(ind)],s=2, label=f'Coastline at {dist[0]}km')
+
+if cross_title == 'Sumatra Mid Central':	# Plot the off-shore radar (R/V Mirai of JAMSTEC)
+	RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='r', label='R/V Mirai')
+	# Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+	BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='r', label='BMKG Observatory')
 
 cbar=cf1.colorbar
 cbar.set_label('Terrain Height [m]',fontsize=fs)
@@ -2295,18 +3087,20 @@ cbar.set_ticklabels([0,10,100,1000,2000,3000],fontsize=fs)
 
 ax1.set_xlabel('',fontsize=18)
 ax1.set_ylabel('',fontsize=18)
-ax1.set_title('Western Central Sumatra',fontsize=fs+4)
+ax1.set_title(cross_title,fontsize=fs+4)
 ax1.set_xticks(x_ticks)
 ax1.set_xticklabels(x_tick_labels,fontsize=fs)
 ax1.set_yticks(y_ticks)
 ax1.set_yticklabels(y_tick_labels,fontsize=fs)
+ax1.set_xlim([lon[0],lon[1]])
+ax1.set_ylim([lat[0],lat[1]])
 ax1.legend(fontsize='x-large', markerscale=1.7, edgecolor='0')
 # fig.savefig('/home/hragnajarian/PhD/plots/Domain_cross.png', transparent=True)
 
 
 # Rain Rate Evolution
 
-# In[24]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -2314,7 +3108,10 @@ gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.25, height_ratios=[0.875,0.03]
 ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 ax3 = fig.add_subplot(gs[0,2])
-fig.suptitle('Normalized Diurnal Rain Rate Difference from Control', fontsize=28)
+
+title = 'Normalized Diurnal Rain Rate Difference from Control over ' + cross_title
+
+fig.suptitle(title, fontsize=26)
 
 smoothing_num=3
 
@@ -2418,48 +3215,84 @@ x3[:14].plot.contourf(
 fs = 20
 
 # Plot phase speed lines
-ax1.plot([-25,137],[9,24] , color='r')
-ax1.text(60, 18, '3 m/s', color='r', weight='bold',fontsize=fs-6)
-ax1.plot([-25,245],[9,24] , color='r')
-ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
-ax1.plot([-25,623],[9,24] , color='r')
-ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+if cross_title == 'Borneo Northwest':
+	# Borneo phase speed lines
+	ax1.plot([-205,-43],[13.5,28.5] , color='r')
+	ax1.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[13.5,28.5] , color='r')
+	ax1.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[13.5,30.5] , color='r')
+	ax1.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax1.plot([-25,137],[33,48] , color='r')
-ax1.text(60, 42, '3 m/s', color='r', weight='bold',fontsize=fs-6)
-ax1.plot([-25,245],[33,48] , color='r')
-ax1.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
-ax1.plot([-25,623],[33,48] , color='r')
-ax1.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,-43],[37.5,52.5] , color='r')
+	ax1.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[37.5,52.5] , color='r')
+	ax1.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[37.5,54.5] , color='r')
+	ax1.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax2.plot([-25,137],[9,24] , color='r')
-ax2.text(60, 18, '3 m/s', color='r', weight='bold',fontsize=fs-6)
-ax2.plot([-25,245],[9,24] , color='r')
-ax2.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
-ax2.plot([-25,623],[9,24] , color='r')
-ax2.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,-43],[13.5,28.5] , color='r')
+	ax2.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,65],[13.5,28.5] , color='r')
+	ax2.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,530],[13.5,30.5] , color='r')
+	ax2.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax3.plot([-25,137],[9,24] , color='r')
-ax3.text(60, 18, '3 m/s', color='r', weight='bold',fontsize=fs-6)
-ax3.plot([-25,245],[9,24] , color='r')
-ax3.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
-ax3.plot([-25,623],[9,24] , color='r')
-ax3.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,-43],[13.5,28.5] , color='r')
+	ax3.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,65],[13.5,28.5] , color='r')
+	ax3.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,530],[13.5,30.5] , color='r')
+	ax3.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax3.plot([-25,137],[33,48] , color='r')
-ax3.text(60, 42, '3 m/s', color='r', weight='bold',fontsize=fs-6)
-ax3.plot([-25,245],[33,48] , color='r')
-ax3.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
-ax3.plot([-25,623],[33,48] , color='r')
-ax3.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,-43],[37.5,52.5] , color='r')
+	ax3.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,65],[37.5,52.5] , color='r')
+	ax3.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,530],[37.5,54.5] , color='r')
+	ax3.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5-1)
+	ax2.set_yticks(x1.hour[0::3].values+0.5)
+	ax3.set_yticks(x1.hour[0::3].values+0.5)
+else:
+	ax1.plot([-45,117],[9,24] , color='r')
+	ax1.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[9,24] , color='r')
+	ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[9,24] , color='r')
+	ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
+	ax1.plot([-45,117],[33,48] , color='r')
+	ax1.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[33,48] , color='r')
+	ax1.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[33,48] , color='r')
+	ax1.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
-ax2.set_xlim([x2.Distance[0],x2.Distance[-1]])
-ax3.set_xlim([x3.Distance[0],x3.Distance[-1]])
-ax1.set_ylim([0,46.5])
-ax2.set_ylim([0,46.5])
-ax3.set_ylim([0,46.5])
+	ax2.plot([-45,117],[9,24] , color='r')
+	ax2.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-45,225],[9,24] , color='r')
+	ax2.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-45,603],[9,24] , color='r')
+	ax2.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-45,117],[9,24] , color='r')
+	ax3.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,225],[9,24] , color='r')
+	ax3.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,603],[9,24] , color='r')
+	ax3.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-45,117],[33,48] , color='r')
+	ax3.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,225],[33,48] , color='r')
+	ax3.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,603],[33,48] , color='r')
+	ax3.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5)
+	ax2.set_yticks(x1.hour[0::3].values+0.5)
+	ax3.set_yticks(x1.hour[0::3].values+0.5)
+
 # Plot the vertical line at approximate coastline
 ax1.axvline(x=0, color='k', linestyle='--')
 ax2.axvline(x=0, color='k', linestyle='--')
@@ -2476,18 +3309,12 @@ ax2.set_ylabel('')
 ax3.yaxis.tick_right()
 ax3.yaxis.set_label_position("right")
 ax3.set_ylabel('Lead Time', fontsize=fs)
-ax1.invert_xaxis()
-ax2.invert_xaxis()
-ax3.invert_xaxis()
-ax1.set_xticks(np.arange(-200,400,100))
-ax2.set_xticks(np.arange(-200,400,100))
-ax3.set_xticks(np.arange(-200,400,100))
-ax1.set_xticklabels(np.arange(-200,400,100),fontsize=fs-6)
-ax2.set_xticklabels(np.arange(-200,400,100),fontsize=fs-6)
-ax3.set_xticklabels(np.arange(-200,400,100),fontsize=fs-6)
-ax1.set_yticks(x1.hour[0::3].values+0.5)
-ax2.set_yticks(x1.hour[0::3].values+0.5)
-ax3.set_yticks(x1.hour[0::3].values+0.5)
+ax1.set_xticks(np.arange(-200,600,100))
+ax2.set_xticks(np.arange(-200,600,100))
+ax3.set_xticks(np.arange(-200,600,100))
+ax1.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax3.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
 ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
 ax2.set_yticklabels(np.arange(0,48,3),fontsize=fs-6)
 ax3.set_yticklabels(np.arange(-12,36,3),fontsize=fs-6)
@@ -2498,8 +3325,16 @@ ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
 ax2.set_title('b)', loc='left', fontsize=fs)
 ax3.set_title('NCRF Sunset', loc='center', fontsize=fs)
 ax3.set_title('c)', loc='left', fontsize=fs)
-# ax1.set_title('Western Central Coast of Sumatra', loc='right', fontsize=10)
-# ax1.set_title('', loc='center')
+
+ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
+ax2.set_xlim([x2.Distance[0],x2.Distance[-1]])
+ax3.set_xlim([x3.Distance[0],x3.Distance[-1]])
+ax1.set_ylim([0,46.5])
+ax2.set_ylim([0,46.5])
+ax3.set_ylim([0,46.5])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+ax3.invert_xaxis()
 
 # Plot the colorbar
 	# Rain rate colorbar
@@ -2516,12 +3351,590 @@ cbar.set_ticklabels(np.arange(-3,4,1), fontsize=fs-6)
 cbar.set_label("[$(RR-RR_{cntl})/\sigma_{cntl}$]", fontsize=fs-6)
 
 # Save figure
-fig.savefig('/home/hragnajarian/PhD/plots/NormDiff_RR.png', transparent=True)
+# fig.savefig('/home/hragnajarian/PhD/plots/NormDiff_RR.png', transparent=True)
 
 
-# Net CRF at Surface and Upward Heat Flux
+# In[ ]:
 
-# In[175]:
+
+fig = plt.figure(figsize=(19.5,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.25, height_ratios=[0.875,0.03], wspace=0.1, width_ratios=[.33,.33,.33])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+ax3 = fig.add_subplot(gs[0,2])
+
+title = 'Normalized Diurnal Rain Rate over ' + cross_title
+
+fig.suptitle(title, fontsize=26)
+
+smoothing_num=3
+
+# Load Data
+	# Control Data
+x1 = da_d02_cross_RR_cntl[12:]	# remove first 12 hrs (spin-up)
+# Composite diurnally, and then average over each cross-section
+x1 = x1.groupby('Time.hour').mean().mean('Spread')
+# Concat to make a more continuous plot
+x1 = xr.concat([x1,x1],dim='hour',data_vars='all')
+x1 = x1.assign_coords(hour=(['hour'],np.arange(-0.5,47.5)))
+
+	# Sim data CRF off @ 00UTC	[Morning]
+x2 = da_d02_cross_RR_CRFoff.sel(Lead=slice(0,18,2))[1:,...]		# Start from 1 instead of 0 because 0 is accumulated RR
+# Composite diurnally, and then average over each cross-section
+x2 = x2.mean(['Lead','Spread'])
+x2 = x2.rename({'Time':'hour'})
+x2 = x2.assign_coords(hour=('hour',np.arange(2,37)))
+# Concat to make a more continuous plot
+x2 = xr.concat([x1[0:2,:], x2],dim='hour',data_vars='all')
+x2 = x2.assign_coords(hour=(['hour'],np.arange(-0.5,36.5)))
+# Normalize the data
+	# Subtract the cntl out and divide by the cntl standard deviation
+x2 = (x2) / x1.std('hour')
+
+	# Sim data CRF off @ 12UTC	[Evening]
+x3 = da_d02_cross_RR_CRFoff.sel(Lead=slice(1,18,2))[1:,...]		# Start from 1 instead of 0 because 0 is accumulated RR
+# # Switch to local time
+# x3 = x3.assign_coords({'Time':x3.Time + np.timedelta64(7,'h')})
+# Composite diurnally, and then average over each cross-section
+x3 = x3.mean(['Lead','Spread'])
+x3 = x3.rename({'Time':'hour'})
+x3 = x3.assign_coords(hour=('hour',np.arange(14,49)))
+# Concat to make a more continuous plot
+x3 = xr.concat([x1[0:14,:], x3],dim='hour',data_vars='all')
+x3 = x3.assign_coords(hour=(['hour'],np.arange(-0.5,48.5)))
+	# Subtract the cntl out and divide by the cntl standard deviation
+x3 = (x3) / x1.std('hour')
+
+# Normalize the data
+x1 = (x1) / x1.std('hour')
+# Smooth the data
+x1 = x1.rolling(Distance=smoothing_num, min_periods=1, center=True).mean()
+x2 = x2.rolling(Distance=smoothing_num, min_periods=1, center=True).mean()
+x3 = x3.rolling(Distance=smoothing_num, min_periods=1, center=True).mean()
+
+# Plot the cross-sectional data
+cf1 = x1.plot.contourf(
+	ax=ax1,
+	x = 'Distance',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(0,6.5,0.5),
+	cmap='gray_r',
+	center=0,
+	extend='max'
+)
+
+# Plot the cross-sectional data
+cf2 = x2.plot.contourf(
+	ax=ax2,
+	x = 'Distance',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(0,6.5,0.5),
+	cmap='gray_r',
+	center=0,
+	extend='max'
+)
+
+# Plot the cross-sectional data
+cf3 = x3.plot.contourf(
+	ax=ax3,
+	x = 'Distance',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(0,6.5,0.5),
+	cmap='gray_r',
+	center=0,
+	extend='max'
+)
+
+# Plot phase speed lines
+if cross_title == 'Borneo Northwest':
+	# Borneo phase speed lines
+	ax1.plot([-205,-43],[13.5,28.5] , color='r')
+	ax1.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[13.5,28.5] , color='r')
+	ax1.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[13.5,30.5] , color='r')
+	ax1.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax1.plot([-205,-43],[37.5,52.5] , color='r')
+	ax1.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[37.5,52.5] , color='r')
+	ax1.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[37.5,54.5] , color='r')
+	ax1.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax2.plot([-205,-43],[13.5,28.5] , color='r')
+	ax2.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,65],[13.5,28.5] , color='r')
+	ax2.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,530],[13.5,30.5] , color='r')
+	ax2.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-205,-43],[13.5,28.5] , color='r')
+	ax3.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,65],[13.5,28.5] , color='r')
+	ax3.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,530],[13.5,30.5] , color='r')
+	ax3.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-205,-43],[37.5,52.5] , color='r')
+	ax3.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,65],[37.5,52.5] , color='r')
+	ax3.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,530],[37.5,54.5] , color='r')
+	ax3.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5-1)
+	ax2.set_yticks(x1.hour[0::3].values+0.5)
+	ax3.set_yticks(x1.hour[0::3].values+0.5)
+else:
+	ax1.plot([-45,117],[9,24] , color='r')
+	ax1.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[9,24] , color='r')
+	ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[9,24] , color='r')
+	ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax1.plot([-45,117],[33,48] , color='r')
+	ax1.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[33,48] , color='r')
+	ax1.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[33,48] , color='r')
+	ax1.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax2.plot([-45,117],[9,24] , color='r')
+	ax2.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-45,225],[9,24] , color='r')
+	ax2.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-45,603],[9,24] , color='r')
+	ax2.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-45,117],[9,24] , color='r')
+	ax3.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,225],[9,24] , color='r')
+	ax3.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,603],[9,24] , color='r')
+	ax3.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-45,117],[33,48] , color='r')
+	ax3.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,225],[33,48] , color='r')
+	ax3.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,603],[33,48] , color='r')
+	ax3.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5)
+	ax2.set_yticks(x1.hour[0::3].values+0.5)
+	ax3.set_yticks(x1.hour[0::3].values+0.5)
+
+
+# Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+ax3.axvline(x=0, color='k', linestyle='--')
+ax2.axhline(y=0, color='r', linestyle='--', linewidth=3)
+ax3.axhline(y=12, color='r', linestyle='--', linewidth=2)
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax3.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs)
+ax2.yaxis.tick_right()
+ax2.yaxis.set_label_position("right")
+ax2.set_ylabel('')
+ax3.yaxis.tick_right()
+ax3.yaxis.set_label_position("right")
+ax3.set_ylabel('Lead Time', fontsize=fs)
+ax1.set_xticks(np.arange(-200,600,100))
+ax2.set_xticks(np.arange(-200,600,100))
+ax3.set_xticks(np.arange(-200,600,100))
+ax1.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax3.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
+ax2.set_yticklabels(np.arange(0,48,3),fontsize=fs-6)
+ax3.set_yticklabels(np.arange(-12,36,3),fontsize=fs-6)
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+ax3.set_title('NCRF Sunset', loc='center', fontsize=fs)
+ax3.set_title('c)', loc='left', fontsize=fs)
+
+ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
+ax2.set_xlim([x2.Distance[0],x2.Distance[-1]])
+ax3.set_xlim([x3.Distance[0],x3.Distance[-1]])
+ax1.set_ylim([0,46.5])
+ax2.set_ylim([0,46.5])
+ax3.set_ylim([0,46.5])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+ax3.invert_xaxis()
+
+# Plot the colorbar
+	# Rain rate colorbar
+cax1 = fig.add_subplot(gs[1, :])
+cbar = plt.colorbar(cf1, cax=cax1, orientation='horizontal', pad=0 , aspect=100)
+cbar.set_ticks(np.arange(0,7,1))
+cbar.set_label('Normalized Rain Rate [RR/$\sigma_{cntl}$]')
+
+
+# Domain stuff
+
+# In[77]:
+
+
+time_type = 'LT'
+
+#### Load Data
+
+if time_type == 'UTC':
+
+	### UTC
+
+	## Control
+
+	# RR
+	RR_cntl = da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+		# Land
+	RR_cntl_land = RR_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	RR_cntl_ocean = RR_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	RR_cntl_net = RR_cntl
+
+	# LowCLDFRA
+	LowCLDFRA_cntl = da_d02_LowCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+		# Land
+	LowCLDFRA_cntl_land = LowCLDFRA_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	LowCLDFRA_cntl_ocean = LowCLDFRA_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	LowCLDFRA_cntl_net = LowCLDFRA_cntl
+
+	# MidCLDFRA
+	MidCLDFRA_cntl = da_d02_MidCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+		# Land
+	MidCLDFRA_cntl_land = MidCLDFRA_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	MidCLDFRA_cntl_ocean = MidCLDFRA_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	MidCLDFRA_cntl_net = MidCLDFRA_cntl
+
+	# HighCLDFRA
+	HighCLDFRA_cntl = da_d02_HighCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+		# Land
+	HighCLDFRA_cntl_land = HighCLDFRA_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	HighCLDFRA_cntl_ocean = HighCLDFRA_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	HighCLDFRA_cntl_net = HighCLDFRA_cntl
+
+	## SWCRF
+	SWSFC_cntl = da_d02_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+	# Remove the diurnal mean
+	for i in np.arange(0,24):
+		SWSFC_cntl[SWSFC_cntl.Time.dt.hour.isin(i)] = SWSFC_cntl[SWSFC_cntl.Time.dt.hour.isin(i)] - SWSFC_cntl[SWSFC_cntl.Time.dt.hour.isin(i)].mean()
+
+		# Land
+	SWSFC_cntl_land = SWSFC_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	SWSFC_cntl_ocean = SWSFC_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	SWSFC_cntl_net = SWSFC_cntl
+
+	## NCRF Sunrise
+
+	# RR
+	RR_sunrise = da_d02_sunrise_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+	inds = np.argwhere(RR_sunrise.to_numpy()<0)	# Find the inds where RR is negative b/c of stitching many simulations together
+	RR_sunrise[inds[:,0]] = (RR_sunrise[inds[:,0]-1,...]+RR_sunrise[inds[:,0]+1,...])/2
+		# Land
+	RR_sunrise_land = RR_sunrise.where(da_d02_LANDMASK==1)
+		# Ocean
+	RR_sunrise_ocean = RR_sunrise.where(da_d02_LANDMASK==0)
+		# Net
+	RR_sunrise_net = RR_sunrise
+
+		# LowCLDFRA
+	LowCLDFRA_sunrise = da_d02_sunrise_LowCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	LowCLDFRA_sunrise_land = LowCLDFRA_sunrise.where(da_d02_LANDMASK==1)
+		# Ocean
+	LowCLDFRA_sunrise_ocean = LowCLDFRA_sunrise.where(da_d02_LANDMASK==0)
+		# Net
+	LowCLDFRA_sunrise_net = LowCLDFRA_sunrise
+
+	# MidCLDFRA
+	MidCLDFRA_sunrise = da_d02_sunrise_MidCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	MidCLDFRA_sunrise_land = MidCLDFRA_sunrise.where(da_d02_LANDMASK==1)
+		# Ocean
+	MidCLDFRA_sunrise_ocean = MidCLDFRA_sunrise.where(da_d02_LANDMASK==0)
+		# Net
+	MidCLDFRA_sunrise_net = MidCLDFRA_sunrise
+
+	# HighCLDFRA
+	HighCLDFRA_sunrise = da_d02_sunrise_HighCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	HighCLDFRA_sunrise_land = HighCLDFRA_sunrise.where(da_d02_LANDMASK==1)
+		# Ocean
+	HighCLDFRA_sunrise_ocean = HighCLDFRA_sunrise.where(da_d02_LANDMASK==0)
+		# Net
+	HighCLDFRA_sunrise_net = HighCLDFRA_sunrise
+
+	## SWCRF
+	SWSFC_sunrise = da_d02_sunrise_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+	# Remove the diurnal mean
+	for i in np.arange(0,24):
+		SWSFC_sunrise[SWSFC_sunrise.Time.dt.hour.isin(i)] = SWSFC_sunrise[SWSFC_sunrise.Time.dt.hour.isin(i)] - SWSFC_sunrise[SWSFC_sunrise.Time.dt.hour.isin(i)].mean()
+		# Land
+	SWSFC_sunrise_land = SWSFC_sunrise.where(da_d02_LANDMASK==1)
+		# Ocean
+	SWSFC_sunrise_ocean = SWSFC_sunrise.where(da_d02_LANDMASK==0)
+		# Net
+	SWSFC_sunrise_net = SWSFC_sunrise
+
+else:
+
+	### Local Solar Time
+
+	## Control
+
+	# RR
+	RR_cntl = assign_LT_coord(da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	RR_cntl_land = RR_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	RR_cntl_ocean = RR_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	RR_cntl_net = RR_cntl
+
+	# LowCLDFRA
+	LowCLDFRA_cntl = assign_LT_coord(da_d02_LowCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	LowCLDFRA_cntl_land = LowCLDFRA_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	LowCLDFRA_cntl_ocean = LowCLDFRA_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	LowCLDFRA_cntl_net = LowCLDFRA_cntl
+
+	# MidCLDFRA
+	MidCLDFRA_cntl = assign_LT_coord(da_d02_MidCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	MidCLDFRA_cntl_land = MidCLDFRA_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	MidCLDFRA_cntl_ocean = MidCLDFRA_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	MidCLDFRA_cntl_net = MidCLDFRA_cntl
+
+	# HighCLDFRA
+	HighCLDFRA_cntl = assign_LT_coord(da_d02_HighCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	HighCLDFRA_cntl_land = HighCLDFRA_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	HighCLDFRA_cntl_ocean = HighCLDFRA_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	HighCLDFRA_cntl_net = HighCLDFRA_cntl
+
+	# # SW SFC
+	# SWSFC_cntl = assign_LT_coord(da_d02_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+	# ## Remove the diurnal mean
+	# npSWSFC_cntl = np.empty(SWSFC_cntl.shape)	# Create numpy array to take place xr data since 2-D boolean indexing is not supported in xarray
+	# for i in np.arange(0,24):
+	# 	bool_array = SWSFC_cntl.LocalTime.dt.hour.isin(i)
+	# 	npSWSFC_cntl[bool_array] = SWSFC_cntl.values[bool_array] - SWSFC_cntl.values[bool_array].mean()
+	# 	print(i)
+	# SWSFC_cntl.data = npSWSFC_cntl
+	# 	# Land
+	# SWSFC_cntl_land = SWSFC_cntl.where(da_d02_LANDMASK==1)
+	# 	# Ocean
+	# SWSFC_cntl_ocean = SWSFC_cntl.where(da_d02_LANDMASK==0)
+	# 	# Net
+	# SWSFC_cntl_net = SWSFC_cntl
+
+	# # SW SFC CRF
+	# SWSFC_CRF_cntl = assign_LT_coord(da_d02_SWSFC_CRF.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+	# ## Remove the diurnal mean
+	# npSWSFC_CRF_cntl = np.empty(SWSFC_CRF_cntl.shape)	# Create numpy array to take place xr data since 2-D boolean indexing is not supported in xarray
+	# for i in np.arange(0,24):
+	# 	bool_array = SWSFC_CRF_cntl.LocalTime.dt.hour.isin(i)
+	# 	npSWSFC_CRF_cntl[bool_array] = SWSFC_CRF_cntl.values[bool_array] - SWSFC_CRF_cntl.values[bool_array].mean()
+	# 	print(i)
+	# SWSFC_CRF_cntl.data = npSWSFC_CRF_cntl
+	# 	# Land
+	# SWSFC_CRF_cntl_land = SWSFC_CRF_cntl.where(da_d02_LANDMASK==1)
+	# 	# Ocean
+	# SWSFC_CRF_cntl_ocean = SWSFC_CRF_cntl.where(da_d02_LANDMASK==0)
+	# 	# Net
+	# SWSFC_CRF_cntl_net = SWSFC_CRF_cntl
+
+	# SW Surface CRF
+	SWSFC_CRF_cntl = assign_LT_coord(da_d02_SWSFC_CRF.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	SWSFC_CRF_cntl_land = SWSFC_CRF_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	SWSFC_CRF_cntl_ocean = SWSFC_CRF_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	SWSFC_CRF_cntl_net = SWSFC_CRF_cntl
+
+	# SW Surface Clear
+	SWSFC_Clear_cntl = assign_LT_coord(da_d02_SWSFC_Clear.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	SWSFC_Clear_cntl_land = SWSFC_Clear_cntl.where(da_d02_LANDMASK==1)
+		# Ocean
+	SWSFC_Clear_cntl_ocean = SWSFC_Clear_cntl.where(da_d02_LANDMASK==0)
+		# Net
+	SWSFC_Clear_cntl_net = SWSFC_Clear_cntl
+
+
+
+	## NCRF Sunrise
+
+	# RR
+	RR_sunrise = assign_LT_coord(da_d02_sunrise_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+	# Adjust the values that are negative
+	inds = np.argwhere(RR_sunrise.mean(['south_north','west_east']).to_numpy()<0)[:,0]	# Find the inds where RR is negative b/c of stitching many simulations together
+	RR_sunrise[inds] = (RR_sunrise[inds-1].values+RR_sunrise[inds+1].values)/2
+		# Land
+	RR_sunrise_land = RR_sunrise.where(da_d02_LANDMASK==1).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Ocean
+	RR_sunrise_ocean = RR_sunrise.where(da_d02_LANDMASK==0).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Net
+	RR_sunrise_net = RR_sunrise.mean('south_north',skipna=True).groupby('LocalTime').mean()
+
+	# LowCLDFRA
+	LowCLDFRA_sunrise = assign_LT_coord(da_d02_sunrise_LowCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	LowCLDFRA_sunrise_land = LowCLDFRA_sunrise.where(da_d02_LANDMASK==1).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Ocean
+	LowCLDFRA_sunrise_ocean = LowCLDFRA_sunrise.where(da_d02_LANDMASK==0).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Net
+	LowCLDFRA_sunrise_net = LowCLDFRA_sunrise.mean('south_north',skipna=True).groupby('LocalTime').mean()
+
+	# MidCLDFRA
+	MidCLDFRA_sunrise = assign_LT_coord(da_d02_sunrise_MidCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	MidCLDFRA_sunrise_land = MidCLDFRA_sunrise.where(da_d02_LANDMASK==1).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Ocean
+	MidCLDFRA_sunrise_ocean = MidCLDFRA_sunrise.where(da_d02_LANDMASK==0).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Net
+	MidCLDFRA_sunrise_net = MidCLDFRA_sunrise.mean('south_north',skipna=True).groupby('LocalTime').mean()
+
+	# HighCLDFRA
+	HighCLDFRA_sunrise = assign_LT_coord(da_d02_sunrise_HighCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	HighCLDFRA_sunrise_land = HighCLDFRA_sunrise.where(da_d02_LANDMASK==1).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Ocean
+	HighCLDFRA_sunrise_ocean = HighCLDFRA_sunrise.where(da_d02_LANDMASK==0).mean('south_north',skipna=True).groupby('LocalTime').mean()
+		# Net
+	HighCLDFRA_sunrise_net = HighCLDFRA_sunrise.mean('south_north',skipna=True).groupby('LocalTime').mean()
+
+	# # SWSFC
+	# SWSFC_sunrise = assign_LT_coord(da_d02_sunrise_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+	# SWSFC_sunrise = SWSFC_sunrise.mean('south_north')	# Setup for removing diurnal mean
+	# # Remove the diurnal mean
+	# npSWSFC_sunrise = np.empty(SWSFC_sunrise.shape)	# Create numpy array to take place xr data since 2-D boolean indexing is not supported in xarray
+	# for i in np.arange(0,24):
+	# 	npSWSFC_sunrise[SWSFC_sunrise.LocalTime.dt.hour.isin(i)] = SWSFC_sunrise.values[SWSFC_sunrise.LocalTime.dt.hour.isin(i)] - SWSFC_sunrise.values[SWSFC_sunrise.LocalTime.dt.hour.isin(i)].mean()
+	# SWSFC_sunrise.data = npSWSFC_sunrise
+	# 	# Land
+	# SWSFC_sunrise_land = SWSFC_sunrise.where(da_d02_LANDMASK==1).groupby('LocalTime').mean()
+	# 	# Ocean
+	# SWSFC_sunrise_ocean = SWSFC_sunrise.where(da_d02_LANDMASK==0).groupby('LocalTime').mean()
+	# 	# Net
+	# SWSFC_sunrise_net = SWSFC_sunrise.groupby('LocalTime').mean()
+
+
+# In[166]:
+
+
+# LST
+time_start = 9
+time_end = 15
+lag_plot = 0				# The lag relationship plotted on the first row
+cloud_type = 'Low'
+
+# Cloud Fraction [0->1] 																Between specific times & where it's land/ocean or both
+if cloud_type=='Low':
+	x1 = LowCLDFRA_cntl_land.values[(LowCLDFRA_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(LowCLDFRA_cntl_land.values))].flatten()
+elif cloud_type=='Mid':
+	x1 = MidCLDFRA_cntl_land.values[(MidCLDFRA_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(MidCLDFRA_cntl_land.values))].flatten()
+else:
+	x1 = HighCLDFRA_cntl_land.values[(HighCLDFRA_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(HighCLDFRA_cntl_land.values))].flatten()
+
+# Rain rate [mm/hr]
+if cloud_type =='Low':
+	# Rain Rate [mm/day] LOW CLOUDS
+	x2 = RR_cntl_land.values[(RR_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(LowCLDFRA_cntl_land.values))].flatten()
+else:
+	# Rain Rate [mm/day]
+	x2 = RR_cntl_land.values[(RR_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(RR_cntl_land.values))].flatten()
+
+# SW Surface Flux  [W/m^2] 
+if cloud_type =='Low':
+	# SW Surface CRF Flux  [W/m^2] LOW CLOUDS
+	x3 = SWSFC_CRF_cntl_land.values[(SWSFC_CRF_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(LowCLDFRA_cntl_land.values))].flatten()
+		# Normalize by theoretical max flux
+	x3 = x3/SWSFC_Clear_cntl_land.values[(SWSFC_Clear_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(LowCLDFRA_cntl_land.values))].flatten()
+else:
+	# SW Surface CRF Flux  [W/m^2] 
+	x3 = SWSFC_CRF_cntl_land.values[(SWSFC_CRF_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(SWSFC_CRF_cntl_land.values))].flatten()
+		# Normalize by theoretical max flux
+	x3 = x3/SWSFC_Clear_cntl_land.values[(SWSFC_Clear_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(SWSFC_Clear_cntl_land.values))].flatten()
+
+
+# In[ ]:
+
+
+plt.hist(x1, density=True)
+
+
+# In[ ]:
+
+
+plt.hist(x2, bins=np.arange(-.5,15.5,1), density=True)
+
+
+# In[ ]:
+
+
+x2.max()
+
+
+# In[ ]:
+
+
+x2.min()
+
+
+# In[ ]:
+
+
+# plt.hist(x3, bins=np.arange(-850,450,100), density=True)
+plt.hist(x3, density=True)
+# plt.hist(SWSFC_Clear_cntl_land.values[(SWSFC_Clear_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(SWSFC_Clear_cntl_land.values))].flatten(), density=True)
+
+
+# In[ ]:
+
+
+x3.max()
+
+
+# In[ ]:
+
+
+x3[~np.isnan(x3)].max() 
+
+
+# In[167]:
+
+
+nitter=np.random.randint(low=0,high=len(x1),size=100000)
+
+
+# In[168]:
 
 
 fig = plt.figure(figsize=(7,7))
@@ -2529,9 +3942,866 @@ gs = gridspec.GridSpec(nrows=2, ncols=2, height_ratios=[0.87,0.03], width_ratios
 ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 
+fs = 18
+
+# LST
+# time_start = 7
+# time_end = 12
+
+# fig.suptitle(f'Time series relationship over 0->{land_dist_thresh:.0f} km during {time_start:.0f}-{time_end:.0f}UTC between Cloud Fraction and SW CRF @ Surface', fontsize=14)
+
+# # Cloud Fraction [0->1] 
+# x1 = HighCLDFRA_cntl_land.values[(HighCLDFRA_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(HighCLDFRA_cntl_land.values))].flatten()
+
+# # Rain Rate [mm/day]
+# x2 = RR_cntl_land.values[(RR_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(RR_cntl_land.values))].flatten()
+
+# # SW Surface Flux  [W/m^2] 
+# x3 = SWSFC_cntl_land.values[(SWSFC_cntl_land.LocalTime.dt.hour.isin(np.arange(time_start,time_end)))&(~np.isnan(SWSFC_cntl_land.values))].flatten()
+
+
+x1_range = [-.05,1.05]
+x2_range = [0,7]
+# x3_range = [-900,300]
+# x3_range = [-1000,100]
+x3_range = [-1.05,.05]
+
+# Only plot a select number of scatters
+# nitter=1000000
+# nitter=np.random.randint(low=0,high=len(x1),size=100000)
+
+# s1 = ax1.scatter(x1[:nitter],x3[:nitter],c=x2[:nitter],s=15,cmap='gray_r',edgecolors='0.5',alpha=0.5,linewidths=.15, vmin=x2_range[0], vmax=x2_range[1])
+s1 = ax1.scatter(x1[nitter],x3[nitter],c=x2[nitter],s=15,cmap='gray_r',edgecolors='0.5',alpha=0.25,linewidths=.01, vmin=x2_range[0], vmax=x2_range[1])
+
+# Linear Regression
+# min_lag = 0
+# max_lag = 0
+# lag_plot = 0				# The lag relationship plotted on the first row
+# da2 = linreg(x1, x3, min_lag, max_lag)
+# l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+# slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+# yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+# r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+# ax1.text(.6, -.2, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+# # Polynomial Fit
+# poly_fit = np.polyfit(x1, x3, deg=3)
+# z = np.poly1d(poly_fit)
+# l2 = ax1.plot(np.arange(0,1.01,.01), z(np.arange(0,1.01,.01)))
+
+# # Exponential Fit
+# # Prepare dataset
+# bin_edges = np.arange(0, 1.05, 0.05)  # bins from 0 to 100, with a bin width of 10
+# # Digitize x-values: determine which bin each x-value falls into
+# bin_indices = np.digitize(x1, bin_edges)
+# # Initialize arrays to hold binned results
+# bin_means = np.zeros(len(bin_edges) - 1)
+# bin_counts = np.zeros(len(bin_edges) - 1)
+# # Calculate mean y-values in each bin
+# for i in range(1, len(bin_edges)):
+#     bin_mask = bin_indices == i
+#     bin_means[i-1] = x3[bin_mask].mean() if np.any(bin_mask) else np.nan
+#     bin_counts[i-1] = np.sum(bin_mask)
+# # Define the exponential function
+# def exponential_func(x, a, b):
+#     return a * np.exp(b * x)
+# # Fit the exponential curve
+# params, covariance = curve_fit(exponential_func, bin_edges[:-1], bin_means)
+# # Extract the fitting parameters
+# a_fit, b_fit = params
+# # Generate y values based on the fitted parameters
+# y_fit = exponential_func(bin_edges[:-1], *params)
+# l2 = ax1.plot(bin_edges[:-1], y_fit, color='red', label=f'Fitted Curve: y = {a_fit:.2f} * exp({b_fit:.2f} * x)')
+
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Normalized SW Surface CRF & {cloud_type} Cloud Fraction\n over land n={len(x1):.0f} between {time_start}-{time_end} LST'
+ax1.set_title(title, fontsize=12)
+ax1.set_xlabel('Cloud Fraction',fontsize=10)
+ax1.set_ylabel('(SW SFC CRF) / (SW SFC Clear)',fontsize=10)
+ax1.set_xlim([x1_range[0],x1_range[1]])
+ax1.set_ylim([x3_range[0],x3_range[1]])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+cax1 = fig.add_subplot(gs[1, 0])
+cbar = plt.colorbar(s1,cax=cax1, orientation='horizontal', pad=0, extend='max')
+cbar.set_ticks(np.arange(x2_range[0],x2_range[1]+1,1))
+cbar.set_ticklabels(np.arange(x2_range[0],x2_range[1]+1,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm/hour$]')
+
+
+# Create rain rate plot to the right
+dy = .025			# Bin size
+rain_rate_bins = np.arange(-1,0+dy,dy)
+# rain_rate_bins = np.arange(0,1+dy,dy)
+rain_rate = np.zeros(len(rain_rate_bins))
+for i in range(len(rain_rate_bins)-1):
+	RR = np.nanmean(np.where((x3>rain_rate_bins[i])&(x3<=rain_rate_bins[i+1]),x2, np.nan))
+	#RR = x2.where((x3>rain_rate_bins[i])&(x3<=rain_rate_bins[i+1]),drop=True).mean().values
+	if ~np.isnan(RR):
+		rain_rate[i]=RR
+
+l1 = ax2.plot(rain_rate,rain_rate_bins, color='k')
+ax2.axhline(y=0, color='k', linestyle='-', linewidth=1)
+ax2.set_xlabel('[$mm/hour$]',fontsize=10)
+ax2.set_ylabel('',fontsize=10)
+ax2.set_yticklabels([])
+# ax2.xaxis.set_tick_params(left = False)
+ax2.set_xlim([0,3])
+ax2.set_ylim([x3_range[0],x3_range[1]])
+ax2.grid(linestyle='--', axis='both', linewidth=1)
+
+
+# Cross-section Rain Rate
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(12,7))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+# Coastal/Custom Average
+land_dist_thresh=-100
+ocean_dist_thresh=100
+
+# Domain Average
+# land_dist_thresh=da_d02_cross_RR_cntl.Distance.min().values
+# ocean_dist_thresh=da_d02_cross_RR_cntl.Distance.max().values
+
+# Load Data
+	# Control
+x1 = da_d02_cross_RR_cntl.sel(Time=slice('2015-11-23T00','2015-12-02T00'))	# allow for 12-hr spin up
+x1 = x1.groupby('Time.hour').mean()
+		# Average
+x1avg = x1.mean(['Distance','Spread'])
+x1avg = xr.concat([x1avg,x1avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Land only
+x1land = x1.where((x1.Distance<0)&(x1.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x1land = xr.concat([x1land,x1land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean only
+x1ocean = x1.where((x1.Distance>0&(x1.Distance<ocean_dist_thresh))).mean(['Distance','Spread'])
+x1ocean = xr.concat([x1ocean,x1ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# 00 UTC icloud off
+x2 = da_d02_cross_RR_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(0,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
+x2 = x2.mean('Spread')
+da = x2.drop_vars(['Lead','Time','Times'])
+x2 = xr.DataArray(
+				name='RR',
+				data=da.values,
+				dims=['Time','Distance'],
+				coords=dict(
+					Time = da.EnsTime.values,
+					Distance = da.Distance.values,
+					)
+			)
+x2 = x2.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
+		# Average
+x2avg = x2.mean('Distance')
+x2avg = xr.concat([x2avg,x2avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Land
+x2land = x2.where((x2.Distance<0)&(x2.Distance>land_dist_thresh)).mean('Distance')
+x2land = xr.concat([x2land,x2land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+x2ocean = x2.where((x2.Distance>0&(x2.Distance<ocean_dist_thresh))).mean('Distance')
+x2ocean = xr.concat([x2ocean,x2ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# 12 UTC icloud off
+x3 = da_d02_cross_RR_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(1,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
+x3 = x3.mean('Spread')
+da = x3.drop_vars(['Lead','Time','Times'])
+x3 = xr.DataArray(
+				name='RR',
+				data=da.values,
+				dims=['Time','Distance'],
+				coords=dict(
+					Time = da.EnsTime.values,
+					Distance = da.Distance.values,
+					)
+			)
+x3 = x3.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
+		# Average
+x3avg = x3.mean('Distance')
+x3avg = xr.concat([x3avg,x3avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Land
+x3land = x3.where((x3.Distance<0)&(x3.Distance>land_dist_thresh)).mean('Distance')
+x3land = xr.concat([x3land,x3land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+x3ocean = x3.where((x3.Distance>0&(x3.Distance<ocean_dist_thresh))).mean('Distance')
+x3ocean = xr.concat([x3ocean,x3ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+# Control
+avg1 = x1avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = '-',
+	label='$Control_{avg}$'
+)
+land1 = x1land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '-',
+	label='$Control_{land}$'
+)
+ocean1 = x1ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '-',
+	label='$Control_{ocean}$'
+)
+# 00UTC CRF off
+avg2 = x2avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = '--',
+	label='$00UTC CRF off_{avg}$'
+)
+land2 = x2land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '--',
+	label='$00UTC CRF off_{land}$'
+)
+ocean2 = x2ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '--',
+	label='$00UTC CRF off_{ocean}$'
+)
+# 12UTC CRF off
+avg3 = x3avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = ':',
+	label='$12UTC CRF off_{avg}$'
+)
+land3 = x3land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = ':',
+	label='$12UTC CRF off_{land}$'
+)
+ocean3 = x3ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = ':',
+	label='$12UTC CRF off_{ocean}$'
+)
+
+ax1.set_xlim([0,24])
+ax1.set_ylim([0,5])
+ax1.set_xticks(np.arange(0,27,3))
+title = f'Domain Averaged Diurnal Rain Rate: {cross_title:s}\n Land: 0-{abs(int(land_dist_thresh))}km Ocean: 0-{int(ocean_dist_thresh)}km'
+ax1.set_title(title, fontsize=fs-4)
+ax1.set_xlabel('UTC')
+ax1.set_ylabel('Rain Rate [$mm d^{-1}$]')
+ax1.grid(linestyle='--', axis='x', linewidth=1)
+ax1.grid(linestyle='--', axis='y', linewidth=1)
+ax1.legend(ncols=3)
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(12,7))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+# Coastal/Custom Average
+land_dist_thresh = -242
+land_coast_dist = -100
+ocean_dist_thresh = 100
+ocean_coast_dist = 0
+
+# Domain Average
+# land_dist_thresh=da_d02_cross_RR_cntl.Distance.min().values
+# ocean_dist_thresh=da_d02_cross_RR_cntl.Distance.max().values
+
+# Load Data
+	# Control
+x1 = da_d02_cross_RR_cntl.sel(Time=slice('2015-11-23T02','2015-12-02T00'))	# allow for 12-hr spin up & start when NCRF Sunrise starts
+x1 = x1.groupby('Time.hour').mean()
+		# Average
+x1avg = x1.mean(['Distance','Spread'])
+x1avg = xr.concat([x1avg,x1avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Land only
+x1land = x1.where((x1.Distance<land_coast_dist)&(x1.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x1land = xr.concat([x1land,x1land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean only
+x1ocean = x1.where((x1.Distance>ocean_coast_dist)&(x1.Distance<ocean_dist_thresh)).mean(['Distance','Spread'])
+x1ocean = xr.concat([x1ocean,x1ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# 00 UTC icloud off
+x2 = da_d02_cross_RR_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(0,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
+x2 = x2.mean('Spread')
+da = x2.drop_vars(['Lead','Time','Times'])
+x2 = xr.DataArray(
+				name='RR',
+				data=da.values,
+				dims=['Time','Distance'],
+				coords=dict(
+					Time = da.EnsTime.values,
+					Distance = da.Distance.values,
+					)
+			)
+x2 = x2.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
+		# Average
+x2avg = x2.mean('Distance')
+x2avg = xr.concat([x2avg,x2avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Land
+x2land = x2.where((x2.Distance<land_coast_dist)&(x2.Distance>land_dist_thresh)).mean('Distance')
+x2land = xr.concat([x2land,x2land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+x2ocean = x2.where((x2.Distance>ocean_coast_dist)&(x2.Distance<ocean_dist_thresh)).mean('Distance')
+x2ocean = xr.concat([x2ocean,x2ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# 12 UTC icloud off
+x3 = da_d02_cross_RR_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(1,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
+x3 = x3.mean('Spread')
+da = x3.drop_vars(['Lead','Time','Times'])
+x3 = xr.DataArray(
+				name='RR',
+				data=da.values,
+				dims=['Time','Distance'],
+				coords=dict(
+					Time = da.EnsTime.values,
+					Distance = da.Distance.values,
+					)
+			)
+x3 = x3.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
+		# Average
+x3avg = x3.mean('Distance')
+x3avg = xr.concat([x3avg,x3avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Land
+x3land = x3.where((x3.Distance<land_coast_dist)&(x3.Distance>land_dist_thresh)).mean('Distance')
+x3land = xr.concat([x3land,x3land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+x3ocean = x3.where((x3.Distance>ocean_coast_dist)&(x3.Distance<ocean_dist_thresh)).mean('Distance')
+x3ocean = xr.concat([x3ocean,x3ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+# Control
+avg1 = x1avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = '-',
+	label='$Control_{avg}$'
+)
+land1 = x1land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '-',
+	label='$Control_{land}$'
+)
+ocean1 = x1ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '-',
+	label='$Control_{ocean}$'
+)
+# 00UTC CRF off
+avg2 = x2avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = '--',
+	label='$00UTC CRF off_{avg}$'
+)
+land2 = x2land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '--',
+	label='$00UTC CRF off_{land}$'
+)
+ocean2 = x2ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '--',
+	label='$00UTC CRF off_{ocean}$'
+)
+# 12UTC CRF off
+avg3 = x3avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = ':',
+	label='$12UTC CRF off_{avg}$'
+)
+land3 = x3land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = ':',
+	label='$12UTC CRF off_{land}$'
+)
+ocean3 = x3ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = ':',
+	label='$12UTC CRF off_{ocean}$'
+)
+
+ax1.set_xlim([0,24])
+ax1.set_ylim([0,5])
+ax1.set_xticks(np.arange(0,27,3))
+title = f'Domain Averaged Diurnal Rain Rate: {cross_title:s}\n Land: {int(land_coast_dist)}->{int(land_dist_thresh)}km Ocean: {int(ocean_coast_dist)}->{int(ocean_dist_thresh)}km'
+ax1.set_title(title, fontsize=fs-4)
+ax1.set_xlabel('UTC')
+ax1.set_ylabel('Rain Rate [$mm d^{-1}$]')
+ax1.grid(linestyle='--', axis='x', linewidth=1)
+ax1.grid(linestyle='--', axis='y', linewidth=1)
+ax1.legend(ncols=3)
+
+
+# Domain Rain Rate
+
+# In[ ]:
+
+
+# RR
+RR_cntl = assign_LT_coord(da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=2)
+	# Land
+RR_cntl_land = xarray_reduce(RR_cntl.where(da_d02_LANDMASK==1).mean('south_north'), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+RR_cntl_land_2d = xr.concat([RR_cntl_land,RR_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+
+# In[ ]:
+
+
+# RR
+RR_cntl = assign_LT_coord(da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+	# Land
+RR_cntl_land = xarray_reduce(RR_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+RR_cntl_land_3d = xr.concat([RR_cntl_land,RR_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+
+# In[ ]:
+
+
+RR_cntl_land_3d-RR_cntl_land_2d
+
+
+# In[ ]:
+
+
+time_type = 'LST'
+
+#### Load Data
+
+if time_type == 'UTC':
+
+	### UTC
+
+	## Control
+
+	# RR
+	RR_cntl = da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	RR_cntl_land = RR_cntl.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	RR_cntl_land = xr.concat([RR_cntl_land,RR_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))	# Concat to make the end the same as the start
+		# Ocean
+	RR_cntl_ocean = RR_cntl.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	RR_cntl_ocean = xr.concat([RR_cntl_ocean,RR_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	RR_cntl_net = RR_cntl.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	RR_cntl_net = xr.concat([RR_cntl_net,RR_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	## NCRF Sunrise
+
+	# RR
+	RR_sunrise = da_d02_sunrise_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()	# copy ensures no data manipulation occurs on the OG dataarray
+	inds = np.argwhere(RR_sunrise.mean(['south_north','west_east']).to_numpy()<0)[:,0]			# Find the inds where RR is negative (errors) b/c of stitching many simulations together
+	RR_sunrise[inds] = (RR_sunrise[inds-1].values+RR_sunrise[inds+1].values)/2	# Average the RR between the times where RR is negative
+		# Land
+	RR_sunrise_land = RR_sunrise.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	RR_sunrise_land = xr.concat([RR_sunrise_land,RR_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+	# RR_sunrise_land[1] = np.mean([RR_sunrise_land[0],RR_sunrise_land[2]])
+		# Ocean
+	RR_sunrise_ocean = RR_sunrise.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	RR_sunrise_ocean = xr.concat([RR_sunrise_ocean,RR_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+	# RR_sunrise_ocean[1] = np.mean([RR_sunrise_ocean[0],RR_sunrise_ocean[2]])
+		# Net
+	RR_sunrise_net = RR_sunrise.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	RR_sunrise_net = xr.concat([RR_sunrise_net,RR_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+	# RR_sunrise_net[1] = np.mean([RR_sunrise_net[0],RR_sunrise_net[2]])
+
+else:
+
+	### Local Solar Time
+
+	## Control
+
+	# RR
+	RR_cntl = assign_LT_coord(da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	RR_cntl_land = xarray_reduce(RR_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_cntl_land = xr.concat([RR_cntl_land,RR_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	RR_cntl_ocean = xarray_reduce(RR_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_cntl_ocean = xr.concat([RR_cntl_ocean,RR_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	RR_cntl_net = xarray_reduce(RR_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_cntl_net = xr.concat([RR_cntl_net,RR_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	## NCRF Sunrise
+
+	# RR
+	RR_sunrise = assign_LT_coord(da_d02_sunrise_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy(), dim_num=3)
+	inds = np.argwhere(RR_sunrise.mean(['south_north','west_east']).to_numpy()<0)[:,0]			# Find the inds where RR is negative b/c of stitching many simulations together
+	RR_sunrise[inds] = (RR_sunrise[inds-1].values+RR_sunrise[inds+1].values)/2				# Average the RR between the times where RR is negative
+		# Land
+	RR_sunrise_land = xarray_reduce(RR_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_sunrise_land = xr.concat([RR_sunrise_land,RR_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	RR_sunrise_ocean = xarray_reduce(RR_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_sunrise_ocean = xr.concat([RR_sunrise_ocean,RR_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	RR_sunrise_net = xarray_reduce(RR_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_sunrise_net = xr.concat([RR_sunrise_net,RR_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+
+# In[75]:
+
+
+fig = plt.figure(figsize=(14,6))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+# RR-land
+l1 = RR_cntl_land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '-',
+	label='RR-cntl-land'
+)
+l2 = RR_sunrise_land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '--',
+	label='RR-sunrise-land'
+)
+l3 = RR_cntl_ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '-',
+	label='RR-cntl-ocean'
+)
+l4 = RR_sunrise_ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '--',
+	label='RR-sunrise-ocean'
+)
+l5 = RR_cntl_net.plot.line(
+    ax=ax1,
+    color='k',
+    linewidth=2,
+    linestyle = '-',
+	label='RR-cntl-net'
+)
+l6 = RR_sunrise_net.plot.line(
+    ax=ax1,
+    color='k',
+    linewidth=2,
+    linestyle = '--',
+	label='RR-sunrise-net'
+)
+
+fs = 20
+
+ax1.set_xticks(np.arange(0,25,3))
+ax1.set_yticks(np.arange(0,3,1))
+title = f'Diurnal Composite of Rain Rate over the MC'
+ax1.set_title(title, fontsize=fs)
+ax1.set_xlabel(f'{time_type}', fontsize=fs)
+ax1.set_ylabel('Rain Rate [$mm d^{-1}$]', fontsize=fs)
+ax1.set_xticklabels(np.arange(0,25,3), fontsize=fs-6)
+ax1.set_yticklabels(np.arange(0,3,1), fontsize=fs-6)
+ax1.grid(linestyle='--', axis='x', linewidth=1)
+ax1.grid(linestyle='--', axis='y', linewidth=1)
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+ax1.legend(ncol=3, fontsize=fs-6)
+ax1.set_xlim([0,24])
+ax1.set_ylim([0,2])
+
+# Save figure
+# fig.savefig('/home/hragnajarian/PhD/plots/DC_HFXandRR.png', transparent=True)
+
+
+# Normal Wind Evolution
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(19.5,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.25, height_ratios=[0.875,0.03], wspace=0.1, width_ratios=[.33,.33,.33])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+ax3 = fig.add_subplot(gs[0,2])
+
+level = 950
+title = f'Normalized Diurnal Normal Wind Difference from Control over ' + cross_title + f' at {level}hPa'
+
+fig.suptitle(title, fontsize=26)
+
+smoothing_num=3
+
+# Load Data
+	# Control Data
+x1 = da_d02_cross_NormalWind_cntl[12:].sel(bottom_top=level)
+# Composite diurnally, and then average over each cross-section
+x1 = x1.groupby('Time.hour').mean().mean('Spread')
+# Concat to make a more continuous plot
+x1 = xr.concat([x1,x1],dim='hour',data_vars='all')
+x1 = x1.assign_coords(hour=(['hour'],np.arange(-0.5,47.5)))
+
+	# Sim data CRF off @ 00UTC	[Morning]
+x2 = da_d02_cross_NormalWind_CRFoff.sel(bottom_top=level, Lead=slice(0,18,2))
+# Composite diurnally, and then average over each cross-section
+x2 = x2.mean(['Lead','Spread'])
+x2 = x2.rename({'Time':'hour'})
+x2 = x2.assign_coords(hour=('hour',np.arange(1,37)))
+# Concat to make a more continuous plot
+x2 = xr.concat([x1[0,:], x2],dim='hour',data_vars='all').transpose()
+x2 = x2.assign_coords(hour=(['hour'],np.arange(-0.5,36.5)))
+# Normalize the data
+	# Subtract the cntl out and divide by the cntl standard deviation
+x2 = (x2-x1) / x1.std('hour')
+
+	# Sim data CRF off @ 12UTC	[Evening]
+x3 = da_d02_cross_NormalWind_CRFoff.sel(bottom_top=level, Lead=slice(1,18,2))
+# Composite diurnally, and then average over each cross-section
+x3 = x3.mean(['Lead','Spread'])
+x3 = x3.rename({'Time':'hour'})
+x3 = x3.assign_coords(hour=('hour',np.arange(13,49)))
+# Concat to make a more continuous plot
+x3 = xr.concat([x1[0:13,:], x3],dim='hour',data_vars='all')
+x3 = x3.assign_coords(hour=(['hour'],np.arange(-0.5,48.5)))
+# Normalize the data
+	# Subtract the cntl out and divide by the cntl standard deviation
+x3 = (x3-x1) / x1.std('hour')
+
+# Smooth the data
+x1 = x1.rolling(Distance=smoothing_num, min_periods=1, center=True).mean()
+x2 = x2.rolling(Distance=smoothing_num, min_periods=1, center=True).mean()
+x3 = x3.rolling(Distance=smoothing_num, min_periods=1, center=True).mean()
+
+# Plot the cross-sectional data
+cf1 = x1.plot.contourf(
+	ax=ax1,
+	x = 'Distance',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(-4,4.5,0.5),
+	cmap='RdBu_r',
+	center=0,
+	extend='both'
+)
+
+# Plot the cross-sectional data
+cf2 = x2.plot.contourf(
+	ax=ax2,
+	x = 'Distance',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(-3,3.5,0.5),
+	cmap='RdBu_r',
+	center=0,
+	extend='both'
+)
+
+# Plot the cross-sectional data
+cf3 = x3.plot.contourf(
+	ax=ax3,
+	x = 'Distance',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(-3,3.5,0.5),
+	cmap='RdBu_r',
+	center=0,
+	extend='both'
+)
+
+# Fontsize
+fs = 20
+
+# Plot phase speed lines
+if cross_title == 'Borneo Northwest':
+	# Borneo phase speed lines
+	ax1.plot([-205,-43],[13.5,28.5] , color='r')
+	ax1.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[13.5,28.5] , color='r')
+	ax1.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[13.5,30.5] , color='r')
+	ax1.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax1.plot([-205,-43],[37.5,52.5] , color='r')
+	ax1.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[37.5,52.5] , color='r')
+	ax1.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[37.5,54.5] , color='r')
+	ax1.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax2.plot([-205,-43],[13.5,28.5] , color='r')
+	ax2.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,65],[13.5,28.5] , color='r')
+	ax2.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-205,530],[13.5,30.5] , color='r')
+	ax2.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-205,-43],[13.5,28.5] , color='r')
+	ax3.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,65],[13.5,28.5] , color='r')
+	ax3.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,530],[13.5,30.5] , color='r')
+	ax3.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-205,-43],[37.5,52.5] , color='r')
+	ax3.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,65],[37.5,52.5] , color='r')
+	ax3.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-205,530],[37.5,54.5] , color='r')
+	ax3.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5-1)
+	ax2.set_yticks(x1.hour[0::3].values+0.5)
+	ax3.set_yticks(x1.hour[0::3].values+0.5)
+else:
+	ax1.plot([-45,117],[9,24] , color='r')
+	ax1.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[9,24] , color='r')
+	ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[9,24] , color='r')
+	ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax1.plot([-45,117],[33,48] , color='r')
+	ax1.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[33,48] , color='r')
+	ax1.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[33,48] , color='r')
+	ax1.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax2.plot([-45,117],[9,24] , color='r')
+	ax2.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-45,225],[9,24] , color='r')
+	ax2.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax2.plot([-45,603],[9,24] , color='r')
+	ax2.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-45,117],[9,24] , color='r')
+	ax3.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,225],[9,24] , color='r')
+	ax3.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,603],[9,24] , color='r')
+	ax3.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+	ax3.plot([-45,117],[33,48] , color='r')
+	ax3.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,225],[33,48] , color='r')
+	ax3.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax3.plot([-45,603],[33,48] , color='r')
+	ax3.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5)
+	ax2.set_yticks(x1.hour[0::3].values+0.5)
+	ax3.set_yticks(x1.hour[0::3].values+0.5)
+
+# Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+ax3.axvline(x=0, color='k', linestyle='--')
+ax2.axhline(y=0, color='r', linestyle='--', linewidth=3)
+ax3.axhline(y=12, color='r', linestyle='--', linewidth=2)
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax3.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs)
+ax2.yaxis.tick_right()
+ax2.yaxis.set_label_position("right")
+ax2.set_ylabel('')
+ax3.yaxis.tick_right()
+ax3.yaxis.set_label_position("right")
+ax3.set_ylabel('Lead Time', fontsize=fs)
+ax1.set_xticks(np.arange(-200,600,100))
+ax2.set_xticks(np.arange(-200,600,100))
+ax3.set_xticks(np.arange(-200,600,100))
+ax1.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax3.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
+ax2.set_yticklabels(np.arange(0,48,3),fontsize=fs-6)
+ax3.set_yticklabels(np.arange(-12,36,3),fontsize=fs-6)
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+ax3.set_title('NCRF Sunset', loc='center', fontsize=fs)
+ax3.set_title('c)', loc='left', fontsize=fs)
+
+ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
+ax2.set_xlim([x2.Distance[0],x2.Distance[-1]])
+ax3.set_xlim([x3.Distance[0],x3.Distance[-1]])
+ax1.set_ylim([0,46.5])
+ax2.set_ylim([0,46.5])
+ax3.set_ylim([0,46.5])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+ax3.invert_xaxis()
+
+# Plot the colorbar
+	# Rain rate colorbar
+cax1 = fig.add_subplot(gs[1, 0])
+cbar = plt.colorbar(cf1, cax=cax1, orientation='horizontal', pad=0 , aspect=100)
+cbar.set_ticks(np.arange(-4,5,1))
+cbar.set_ticklabels(np.arange(-4,5,1), fontsize=fs-6)
+cbar.set_label('Normal wind [$m/s$]', fontsize=fs-6)
+
+cax2 = fig.add_subplot(gs[1, 1:3])
+cbar = plt.colorbar(cf2, cax=cax2, orientation='horizontal', pad=0 , aspect=100, extend='both')
+cbar.set_ticks(np.arange(-3,4,1))
+cbar.set_ticklabels(np.arange(-3,4,1), fontsize=fs-6)
+cbar.set_label("[$(U_{Normal}-U_{Normal_{cntl}})/\sigma_{cntl}$]", fontsize=fs-6)
+
+
+# Net CRF at Surface and Upward Heat Flux
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=2, ncols=2, height_ratios=[0.87,0.03], width_ratios=[0.85,0.15], hspace=0.3, wspace=0.05)
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+
+fs = 18
+
 # Set thresholds
-land_dist_thresh = -100		# km
-# ocean_dist_thresh = 100	# km
+land_dist_thresh = -242
+land_coast_dist = -100
+ocean_dist_thresh = 100
+ocean_coast_dist = 0
+
 time_start = 0
 time_end = 9
 lag_plot = 0				# The lag relationship plotted on the first row
@@ -2543,7 +4813,7 @@ x1 = da_d02_cross_HFX_cntl[12:]	# remove first 12 hrs (spin-up)
 # Only select the times you want to look at
 x1 = x1.sel(Time=x1.Time.dt.hour.isin(np.arange(time_start,time_end)))
 # Isolate over a specific region/time
-x1 = x1.where((x1.Distance>land_dist_thresh)&(x1.Distance<0),drop=True).mean('Spread')
+x1 = x1.where((x1.Distance>land_dist_thresh)&(x1.Distance<land_coast_dist),drop=True).mean('Spread')
 # Anomalize
 x1mean = x1.groupby('Time.hour').mean()
 for i in np.arange(time_start,time_end):
@@ -2554,7 +4824,7 @@ x2 = da_d02_cross_RR_cntl[12:]	# remove first 12 hrs (spin-up)
 # Only select the times you want to look at
 x2 = x2.sel(Time=x2.Time.dt.hour.isin(np.arange(time_start,time_end)))
 # Isolate over a specific region/time
-x2 = x2.where((x2.Distance>land_dist_thresh)&(x2.Distance<0),drop=True).mean('Spread')
+x2 = x2.where((x2.Distance>land_dist_thresh)&(x2.Distance<land_coast_dist),drop=True).mean('Spread')
 # x2mean = x2.groupby('Time.hour').mean()
 # for i in np.arange(time_start,time_end):
 # 	x2[x2.Time.dt.hour.isin(i)] = x2[x2.Time.dt.hour.isin(i)]-x2mean.sel(hour=i)	# Divide by the mean recorded at each hour to remove diurnal variations
@@ -2564,7 +4834,7 @@ x3 = da_d02_cross_NetSfcCRF_cntl[12:]	# remove first 12 hrs (spin-up)
 # Only select the times you want to look at
 x3 = x3.sel(Time=x3.Time.dt.hour.isin(np.arange(time_start,time_end)))
 # Isolate over a specific region/time
-x3 = x3.where((x3.Distance>land_dist_thresh)&(x3.Distance<0),drop=True).mean('Spread')
+x3 = x3.where((x3.Distance>land_dist_thresh)&(x3.Distance<land_coast_dist),drop=True).mean('Spread')
 # Anomalize
 x3mean = x3.groupby('Time.hour').mean()
 for i in np.arange(time_start,time_end):
@@ -2578,7 +4848,7 @@ da2 = linreg(x1.values[~np.isnan(x1)], x3.values[~np.isnan(x1)], min_lag, max_la
 
 ## Plot linear regressions	##
 
-s1 = ax1.scatter(x1,x3,c=x2,s=15,cmap='gray_r',edgecolors='0.5',linewidths=.15)
+s1 = ax1.scatter(x1,x3,c=x2,s=15,cmap='gray_r',edgecolors='0.5',alpha=0.5,linewidths=.15, vmin=0, vmax=7)
 
 l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
 slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
@@ -2588,22 +4858,24 @@ ax1.text(-100, 325, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$'
 
 ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
 ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
-ax1.set_title(f'Anomalized Hourly Net Surface CRF & Sensible Heat Flux Up\n 0->{land_dist_thresh:.0f} km, {time_start:.0f}->{time_end-1:.0f}UTC, and n={len(x1.values[~np.isnan(x1)]):.0f}',fontsize=12)
+title = f'Anomalized Hourly Net Surface CRF & Sensible Heat Flux Up\n {land_coast_dist}->{land_dist_thresh:.0f} km, {time_start:.0f}->{time_end-1:.0f}UTC, n={len(x1.values[~np.isnan(x1)]):.0f}, over {cross_title:s}'
+ax1.set_title(title, fontsize=12)
 ax1.set_xlabel('Anomalous HFX [$W/m^{2}$]',fontsize=10)
 ax1.set_ylabel('Anomalous Net SFC CRF [$W/m^{2}$]',fontsize=10)
 ax1.set_xlim([-150,149.99])
-ax1.set_ylim([-400,400])
+ax1.set_ylim([-425,425])
 ax1.grid(linestyle='--', axis='both', linewidth=1)
 
 cax1 = fig.add_subplot(gs[1, :])
-cbar = plt.colorbar(s1,cax=cax1, orientation='horizontal', pad=0)
-# cbar.set_ticks(np.arange(0,5,1))
-# cbar.set_ticklabels(np.arange(0,5,1), fontsize=fs-6)
+cbar = plt.colorbar(s1,cax=cax1, orientation='horizontal', pad=0, extend='max')
+cbar.set_ticks(np.arange(0,8,1))
+cbar.set_ticklabels(np.arange(0,8,1), fontsize=fs-6)
 cbar.set_label('Rain Rate [$mm/day$]')
 
+
 # Create rain rate plot to the right
-dy = 30			# Bin size
-rain_rate_bins = np.arange(-400,425,dy)
+dy = 25			# Bin size
+rain_rate_bins = np.arange(-425,450,dy)
 rain_rate = np.zeros(len(rain_rate_bins))
 for i in range(len(rain_rate_bins)-1):
 	RR = x2.where((x3>rain_rate_bins[i])&(x3<rain_rate_bins[i+1]),drop=True).mean().values
@@ -2617,13 +4889,13 @@ ax2.set_ylabel('',fontsize=10)
 ax2.set_yticklabels([])
 # ax2.xaxis.set_tick_params(left = False)
 ax2.set_xlim([0,7])
-ax2.set_ylim([-400,400])
+ax2.set_ylim([-425,425])
 ax2.grid(linestyle='--', axis='both', linewidth=1)
 
 
 # Upward Heat Flux and SW CRF at Surface
 
-# In[24]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(14,6))
@@ -2631,19 +4903,20 @@ gs = gridspec.GridSpec(nrows=1, ncols=1)
 ax1 = fig.add_subplot(gs[0,0])
 # ax2 = ax1.twinx()
 
-land_dist_thresh = -100
-ocean_dist_thresh = 0
+fs = 18
+# land_dist_thresh = -165
+land_dist_thresh = da_d02_cross_HFX_cntl.Distance.min().values
+# ocean_dist_thresh = -65
+ocean_dist_thresh = -100
 
 local_time = np.concatenate((np.arange(7,25,3),np.arange(1,10,3)))
 # UTC_time = np.concatenate((np.arange(0,24,3),[0]))
-
-
 
 # Load Data
 ## Sensible Heat Flux Up
 	# Control
 x1 = da_d02_cross_HFX_cntl.sel(Time=slice('2015-11-23T00','2015-12-02T00'))
-x1 = x1.where((x1.Distance<ocean_dist_thresh)&(x1.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x1 = x1.where((x1.Distance<ocean_dist_thresh)&(x1.Distance>land_dist_thresh),drop=True).mean(['Distance','Spread'])
 x1std = x1.groupby('Time.hour').std()
 x1 = x1.groupby('Time.hour').mean()
 x1std = xr.concat([x1std,x1std[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
@@ -2662,7 +4935,7 @@ x2 = xr.DataArray(
 					Distance = da.Distance.values,
 					)
 			)
-x2 = x2.where((x2.Distance<ocean_dist_thresh)&(x2.Distance>land_dist_thresh)).mean(['Distance'])
+x2 = x2.where((x2.Distance<ocean_dist_thresh)&(x2.Distance>land_dist_thresh),drop=True).mean(['Distance'])
 x2std = x2.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').std()
 x2 = x2.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
 x2std = xr.concat([x2std,x2std[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
@@ -2671,7 +4944,7 @@ x2 = xr.concat([x2,x2[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
 ## SW SFC FLUX
     # Control
 x3 = da_d02_cross_SWSfc_cntl.sel(Time=slice('2015-11-23T00','2015-12-02T00'))
-x3 = x3.where((x3.Distance<ocean_dist_thresh)&(x3.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x3 = x3.where((x3.Distance<ocean_dist_thresh)&(x3.Distance>land_dist_thresh),drop=True).mean(['Distance','Spread'])
 x3std = x3.groupby('Time.hour').std()
 x3 = x3.groupby('Time.hour').mean()
 x3std = xr.concat([x3std,x3std[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
@@ -2690,13 +4963,41 @@ x4 = xr.DataArray(
 					Distance = da.Distance.values,
 					)
 	)
-x4 = x4.where((x4.Distance<ocean_dist_thresh)&(x4.Distance>land_dist_thresh)).mean(['Distance'])
+x4 = x4.where((x4.Distance<ocean_dist_thresh)&(x4.Distance>land_dist_thresh),drop=True).mean(['Distance'])
 x4std = x4.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').std()
 x4 = x4.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
 x4std = xr.concat([x4std,x4std[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
 x4 = xr.concat([x4,x4[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
 
-# Plotting
+## LW SFC FLUX
+    # Control
+x5 = da_d02_cross_LWSfc_cntl.sel(Time=slice('2015-11-23T00','2015-12-02T00'))
+x5 = x5.where((x5.Distance<ocean_dist_thresh)&(x5.Distance>land_dist_thresh),drop=True).mean(['Distance','Spread'])
+x5std = x5.groupby('Time.hour').std()
+x5 = x5.groupby('Time.hour').mean()
+x5std = xr.concat([x5std,x5std[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+x5 = xr.concat([x5,x5[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+    # NCRF Sunrise
+x6 = da_d02_cross_LWSfc_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(0,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
+x6 = x6.mean('Spread')
+da = x6.drop_vars(['Lead','Time','Times'])
+x6 = xr.DataArray(
+				name='LWSFC',
+				data=da.values,
+				dims=['Time','Distance'],
+				coords=dict(
+					Time = da.EnsTime.values,
+					Distance = da.Distance.values,
+					)
+	)
+x6 = x6.where((x6.Distance<ocean_dist_thresh)&(x6.Distance>land_dist_thresh),drop=True).mean(['Distance'])
+x6std = x6.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').std()
+x6 = x6.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
+x6std = xr.concat([x6std,x6std[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+x6 = xr.concat([x6,x6[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+# HFX
 l1 = x1.plot.line(
     ax=ax1,
     color='k',
@@ -2711,35 +5012,51 @@ l2 = x2.plot.line(
     linestyle = '--',
 	label='Sensible$_{NCRF Sunrise}$'
 )
-
-# Plotting
-l1 = x3.plot.line(
+# SW
+l3 = x3.plot.line(
     ax=ax1,
     color='r',
     linewidth=2,
     linestyle = '-',
 	label='SW SFC$_{Control}$'
 )
-l2 = x4.plot.line(
+l4 = x4.plot.line(
     ax=ax1,
     color='r',
     linewidth=2,
     linestyle = '--',
 	label='SW SFC$_{NCRF Sunrise}$'
 )
+# LW
+l5 = x5.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '-',
+	label='LW SFC$_{Control}$'
+)
+l6 = x6.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '--',
+	label='LW SFC$_{NCRF Sunrise}$'
+)
 # Plot the shading
-ax1.fill_between(np.arange(0,25,1),x1.values-x1std.values,x1.values+x1std.values, alpha=0.15, color='k')
-ax1.fill_between(np.arange(0,25,1),x2.values-x2std.values,x2.values+x2std.values, alpha=0.15, color='k')
-ax1.fill_between(np.arange(0,25,1),x3.values-x3std.values,x3.values+x3std.values, alpha=0.15, color='r')
-ax1.fill_between(np.arange(0,25,1),x4.values-x4std.values,x4.values+x4std.values, alpha=0.15, color='r')
+# ax1.fill_between(np.arange(0,25,1),x1.values-x1std.values,x1.values+x1std.values, alpha=0.15, color='k')
+# ax1.fill_between(np.arange(0,25,1),x2.values-x2std.values,x2.values+x2std.values, alpha=0.15, color='k')
+# ax1.fill_between(np.arange(0,25,1),x3.values-x3std.values,x3.values+x3std.values, alpha=0.15, color='r')
+# ax1.fill_between(np.arange(0,25,1),x4.values-x4std.values,x4.values+x4std.values, alpha=0.15, color='r')
+# ax1.fill_between(np.arange(0,25,1),x5.values-x5std.values,x5.values+x5std.values, alpha=0.15, color='r')
+# ax1.fill_between(np.arange(0,25,1),x6.values-x6std.values,x6.values+x6std.values, alpha=0.15, color='r')
 
-fs = 20
+# fs = 20
 
-ax1.set_xlim([0,24])
-ax1.set_ylim([-100,1000])
-ax1.set_xticks(np.arange(0,27,3))
+if cross_title == 'Borneo Northwest': ax1.set_xticks(np.arange(0,27,3)-1)
+else: ax1.set_xticks(np.arange(0,27,3))
 ax1.set_yticks(np.concatenate(([-100],np.arange(0,1200,200))))
-ax1.set_title(f'Diurnal Composite of\nUpward Heat Flux and Shortwave Flux at Surface',fontsize=fs)
+title = f'Diurnal Composite of Flux at Surface\n {ocean_dist_thresh:.0f}->{land_dist_thresh:.0f} km over {cross_title:s}'
+ax1.set_title(title, fontsize=fs-4)
 ax1.set_xlabel('Local Time', fontsize=fs)
 ax1.set_ylabel('Flux [$Wm^{-2}$]', fontsize=fs)
 ax1.set_xticklabels(local_time, fontsize=fs-6)
@@ -2747,15 +5064,395 @@ ax1.set_yticklabels(np.concatenate(([-100],np.arange(0,1200,200))), fontsize=fs-
 ax1.grid(linestyle='--', axis='x', linewidth=1)
 ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
-ax1.legend(ncol=2, fontsize=fs-6)
+ax1.legend(ncol=3, fontsize=fs-6)
+ax1.set_xlim([0,24])
+ax1.set_ylim([-150,1000])
 
 # Save figure
-fig.savefig('/home/hragnajarian/PhD/plots/DC_HFXandSWSFC.png', transparent=True)
+# fig.savefig('/home/hragnajarian/PhD/plots/DC_HFXandSWSFC.png', transparent=True)
+
+
+# In[78]:
+
+
+#### Load Data
+
+time_type = 'LST'
+
+if time_type == 'UST':
+
+	### UST
+
+	## Control
+
+	# Sensible Heat Flux Up
+	HFX_cntl = da_d02_HFX.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	HFX_cntl_land = HFX_cntl.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	HFX_cntl_land = xr.concat([HFX_cntl_land,HFX_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	HFX_cntl_ocean = HFX_cntl.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	HFX_cntl_ocean = xr.concat([HFX_cntl_ocean,HFX_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	HFX_cntl_net = HFX_cntl.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	HFX_cntl_net = xr.concat([HFX_cntl_net,HFX_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# LWSFC
+	LWSFC_cntl = da_d02_LWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	LWSFC_cntl_land = LWSFC_cntl.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	LWSFC_cntl_land = xr.concat([LWSFC_cntl_land,LWSFC_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	LWSFC_cntl_ocean = LWSFC_cntl.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	LWSFC_cntl_ocean = xr.concat([LWSFC_cntl_ocean,LWSFC_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	LWSFC_cntl_net = LWSFC_cntl.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	LWSFC_cntl_net = xr.concat([LWSFC_cntl_net,LWSFC_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# SWSFC
+	SWSFC_cntl = da_d02_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	SWSFC_cntl_land = SWSFC_cntl.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	SWSFC_cntl_land = xr.concat([SWSFC_cntl_land,SWSFC_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	SWSFC_cntl_ocean = SWSFC_cntl.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	SWSFC_cntl_ocean = xr.concat([SWSFC_cntl_ocean,SWSFC_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	SWSFC_cntl_net = SWSFC_cntl.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	SWSFC_cntl_net = xr.concat([SWSFC_cntl_net,SWSFC_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	## NCRF Sunrise
+
+	# Sensible Heat Flux Up
+	HFX_sunrise = da_d02_sunrise_HFX.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	HFX_sunrise_land = HFX_sunrise.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	HFX_sunrise_land = xr.concat([HFX_sunrise_land,HFX_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	HFX_sunrise_ocean = HFX_sunrise.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	HFX_sunrise_ocean = xr.concat([HFX_sunrise_ocean,HFX_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	HFX_sunrise_net = HFX_sunrise.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	HFX_sunrise_net = xr.concat([HFX_sunrise_net,HFX_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# LWSFC
+	LWSFC_sunrise = da_d02_sunrise_LWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	LWSFC_sunrise_land = LWSFC_sunrise.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	LWSFC_sunrise_land = xr.concat([LWSFC_sunrise_land,LWSFC_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	LWSFC_sunrise_ocean = LWSFC_sunrise.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	LWSFC_sunrise_ocean = xr.concat([LWSFC_sunrise_ocean,LWSFC_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	LWSFC_sunrise_net = LWSFC_sunrise.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	LWSFC_sunrise_net = xr.concat([LWSFC_sunrise_net,LWSFC_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# SWSFC
+	SWSFC_sunrise = da_d02_sunrise_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00'))
+		# Land
+	SWSFC_sunrise_land = SWSFC_sunrise.where(da_d02_LANDMASK==1).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	SWSFC_sunrise_land = xr.concat([SWSFC_sunrise_land,SWSFC_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	SWSFC_sunrise_ocean = SWSFC_sunrise.where(da_d02_LANDMASK==0).mean(['south_north','west_east']).groupby('Time.hour').mean()
+	SWSFC_sunrise_ocean = xr.concat([SWSFC_sunrise_ocean,SWSFC_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	SWSFC_sunrise_net = SWSFC_sunrise.mean(['south_north','west_east']).groupby('Time.hour').mean()
+	SWSFC_sunrise_net = xr.concat([SWSFC_sunrise_net,SWSFC_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+else:
+
+
+	# RR
+	RR_cntl = assign_LT_coord(da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	RR_cntl_land = xarray_reduce(RR_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	RR_cntl_land = xr.concat([RR_cntl_land,RR_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+
+	### LST
+
+	## Control
+
+	# Sensible Heat Flux Up
+	HFX_cntl = assign_LT_coord(da_d02_HFX.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	HFX_cntl_land = xarray_reduce(HFX_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HFX_cntl_land = xr.concat([HFX_cntl_land,HFX_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	HFX_cntl_ocean = xarray_reduce(HFX_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HFX_cntl_ocean = xr.concat([HFX_cntl_ocean,HFX_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	HFX_cntl_net = xarray_reduce(HFX_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HFX_cntl_net = xr.concat([HFX_cntl_net,HFX_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# Low Cloud Fraction
+	LowCLDFRA_cntl = assign_LT_coord(da_d02_LowCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	LowCLDFRA_cntl_land = xarray_reduce(LowCLDFRA_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LowCLDFRA_cntl_land = xr.concat([LowCLDFRA_cntl_land,LowCLDFRA_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	LowCLDFRA_cntl_ocean = xarray_reduce(LowCLDFRA_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LowCLDFRA_cntl_ocean = xr.concat([LowCLDFRA_cntl_ocean,LowCLDFRA_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	LowCLDFRA_cntl_net = xarray_reduce(LowCLDFRA_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LowCLDFRA_cntl_net = xr.concat([LowCLDFRA_cntl_net,LowCLDFRA_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# Mid Cloud Fraction
+	MidCLDFRA_cntl = assign_LT_coord(da_d02_MidCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	MidCLDFRA_cntl_land = xarray_reduce(MidCLDFRA_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	MidCLDFRA_cntl_land = xr.concat([MidCLDFRA_cntl_land,MidCLDFRA_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	MidCLDFRA_cntl_ocean = xarray_reduce(MidCLDFRA_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	MidCLDFRA_cntl_ocean = xr.concat([MidCLDFRA_cntl_ocean,MidCLDFRA_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	MidCLDFRA_cntl_net = xarray_reduce(MidCLDFRA_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	MidCLDFRA_cntl_net = xr.concat([MidCLDFRA_cntl_net,MidCLDFRA_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# High Cloud Fraction
+	HighCLDFRA_cntl = assign_LT_coord(da_d02_HighCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	HighCLDFRA_cntl_land = xarray_reduce(HighCLDFRA_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HighCLDFRA_cntl_land = xr.concat([HighCLDFRA_cntl_land,HighCLDFRA_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	HighCLDFRA_cntl_ocean = xarray_reduce(HighCLDFRA_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HighCLDFRA_cntl_ocean = xr.concat([HighCLDFRA_cntl_ocean,HighCLDFRA_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	HighCLDFRA_cntl_net = xarray_reduce(HighCLDFRA_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HighCLDFRA_cntl_net = xr.concat([HighCLDFRA_cntl_net,HighCLDFRA_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# LWSFC
+	LWSFC_cntl = assign_LT_coord(da_d02_LWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	LWSFC_cntl_land = xarray_reduce(LWSFC_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LWSFC_cntl_land = xr.concat([LWSFC_cntl_land,LWSFC_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	LWSFC_cntl_ocean = xarray_reduce(LWSFC_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LWSFC_cntl_ocean = xr.concat([LWSFC_cntl_ocean,LWSFC_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	LWSFC_cntl_net = xarray_reduce(LWSFC_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LWSFC_cntl_net = xr.concat([LWSFC_cntl_net,LWSFC_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# SWSFC
+	SWSFC_cntl = assign_LT_coord(da_d02_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	SWSFC_cntl_land = xarray_reduce(SWSFC_cntl.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	SWSFC_cntl_land = xr.concat([SWSFC_cntl_land,SWSFC_cntl_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	SWSFC_cntl_ocean = xarray_reduce(SWSFC_cntl.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	SWSFC_cntl_ocean = xr.concat([SWSFC_cntl_ocean,SWSFC_cntl_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	SWSFC_cntl_net = xarray_reduce(SWSFC_cntl, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	SWSFC_cntl_net = xr.concat([SWSFC_cntl_net,SWSFC_cntl_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+
+
+	## NCRF Sunrise
+
+	# Sensible Heat Flux Up
+	HFX_sunrise = assign_LT_coord(da_d02_sunrise_HFX.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	HFX_sunrise_land = xarray_reduce(HFX_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HFX_sunrise_land = xr.concat([HFX_sunrise_land,HFX_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	HFX_sunrise_ocean = xarray_reduce(HFX_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HFX_sunrise_ocean = xr.concat([HFX_sunrise_ocean,HFX_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	HFX_sunrise_net = xarray_reduce(HFX_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HFX_sunrise_net = xr.concat([HFX_sunrise_net,HFX_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# Low Cloud Fraction
+	LowCLDFRA_sunrise = assign_LT_coord(da_d02_sunrise_LowCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	LowCLDFRA_sunrise_land = xarray_reduce(LowCLDFRA_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LowCLDFRA_sunrise_land = xr.concat([LowCLDFRA_sunrise_land,LowCLDFRA_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	LowCLDFRA_sunrise_ocean = xarray_reduce(LowCLDFRA_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LowCLDFRA_sunrise_ocean = xr.concat([LowCLDFRA_sunrise_ocean,LowCLDFRA_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	LowCLDFRA_sunrise_net = xarray_reduce(LowCLDFRA_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LowCLDFRA_sunrise_net = xr.concat([LowCLDFRA_sunrise_net,LowCLDFRA_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# Mid Cloud Fraction
+	MidCLDFRA_sunrise = assign_LT_coord(da_d02_sunrise_MidCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	MidCLDFRA_sunrise_land = xarray_reduce(MidCLDFRA_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	MidCLDFRA_sunrise_land = xr.concat([MidCLDFRA_sunrise_land,MidCLDFRA_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	MidCLDFRA_sunrise_ocean = xarray_reduce(MidCLDFRA_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	MidCLDFRA_sunrise_ocean = xr.concat([MidCLDFRA_sunrise_ocean,MidCLDFRA_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	MidCLDFRA_sunrise_net = xarray_reduce(MidCLDFRA_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	MidCLDFRA_sunrise_net = xr.concat([MidCLDFRA_sunrise_net,MidCLDFRA_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# High Cloud Fraction
+	HighCLDFRA_sunrise = assign_LT_coord(da_d02_sunrise_HighCLDFRA.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	HighCLDFRA_sunrise_land = xarray_reduce(HighCLDFRA_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HighCLDFRA_sunrise_land = xr.concat([HighCLDFRA_sunrise_land,HighCLDFRA_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	HighCLDFRA_sunrise_ocean = xarray_reduce(HighCLDFRA_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HighCLDFRA_sunrise_ocean = xr.concat([HighCLDFRA_sunrise_ocean,HighCLDFRA_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	HighCLDFRA_sunrise_net = xarray_reduce(HighCLDFRA_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	HighCLDFRA_sunrise_net = xr.concat([HighCLDFRA_sunrise_net,HighCLDFRA_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# LWSFC
+	LWSFC_sunrise = assign_LT_coord(da_d02_sunrise_LWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	LWSFC_sunrise_land = xarray_reduce(LWSFC_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LWSFC_sunrise_land = xr.concat([LWSFC_sunrise_land,LWSFC_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	LWSFC_sunrise_ocean = xarray_reduce(LWSFC_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LWSFC_sunrise_ocean = xr.concat([LWSFC_sunrise_ocean,LWSFC_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	LWSFC_sunrise_net = xarray_reduce(LWSFC_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	LWSFC_sunrise_net = xr.concat([LWSFC_sunrise_net,LWSFC_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+	# SWSFC
+	SWSFC_sunrise = assign_LT_coord(da_d02_sunrise_SWSFC.sel(Time=slice('2015-11-23T02','2015-12-02T00')), dim_num=3)
+		# Land
+	SWSFC_sunrise_land = xarray_reduce(SWSFC_sunrise.where(da_d02_LANDMASK==1), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	SWSFC_sunrise_land = xr.concat([SWSFC_sunrise_land,SWSFC_sunrise_land[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Ocean
+	SWSFC_sunrise_ocean = xarray_reduce(SWSFC_sunrise.where(da_d02_LANDMASK==0), 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	SWSFC_sunrise_ocean = xr.concat([SWSFC_sunrise_ocean,SWSFC_sunrise_ocean[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+		# Net
+	SWSFC_sunrise_net = xarray_reduce(SWSFC_sunrise, 'LocalTime.hour', func='mean', expected_groups=(np.arange(0,24)), isbin=[False])
+	SWSFC_sunrise_net = xr.concat([SWSFC_sunrise_net,SWSFC_sunrise_net[0]], dim='hour').assign_coords(hour=np.arange(0,25,1))
+
+
+# In[83]:
+
+
+fig = plt.figure(figsize=(14,6))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+# ax2 = ax1.twinx()
+
+fs = 18
+
+l1 = HFX_cntl_land.plot.line(
+    ax=ax1,
+    color='k',
+    linewidth=2,
+    linestyle = '-',
+	label='HFX-cntl-land'
+)
+l2 = HFX_sunrise_land.plot.line(
+    ax=ax1,
+    color='k',
+    linewidth=2,
+    linestyle = '--',
+	label='HFX-sunrise-land'
+)
+# SW
+l3 = SWSFC_cntl_land.plot.line(
+    ax=ax1,
+    color='r',
+    linewidth=2,
+    linestyle = '-',
+	label='SWSFC-cntl-land'
+)
+l4 = SWSFC_sunrise_land.plot.line(
+    ax=ax1,
+    color='r',
+    linewidth=2,
+    linestyle = '--',
+	label='SWSFC-sunrise-land'
+)
+# LW
+l5 = LWSFC_cntl_land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '-',
+	label='LWSFC-cntl-land'
+)
+l6 = LWSFC_sunrise_land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '--',
+	label='LWSFC-sunrise-land'
+)
+# # CLDFRA
+# l7 = LowCLDFRA_cntl_land.plot.line(
+#     ax=ax2,
+#     color='aqua',
+#     linewidth=2,
+#     linestyle = '-',
+# 	label='LowCLDFRA-cntl-land'
+# )
+# l8 = LowCLDFRA_sunrise_land.plot.line(
+#     ax=ax2,
+#     color='aqua',
+#     linewidth=2,
+#     linestyle = '--',
+# 	label='LowCLDFRA-sunrise-land'
+# )
+# # CLDFRA
+# l9 = MidCLDFRA_cntl_land.plot.line(
+#     ax=ax2,
+#     color='violet',
+#     linewidth=2,
+#     linestyle = '-',
+# 	label='MidCLDFRA-cntl-land'
+# )
+# l10 = MidCLDFRA_sunrise_land.plot.line(
+#     ax=ax2,
+#     color='violet',
+#     linewidth=2,
+#     linestyle = '--',
+# 	label='MidCLDFRA-sunrise-land'
+# )
+# # CLDFRA
+# l11 = HighCLDFRA_cntl_land.plot.line(
+#     ax=ax2,
+#     color='royalblue',
+#     linewidth=2,
+#     linestyle = '-',
+# 	label='HighCLDFRA-cntl-land'
+# )
+# l12 = HighCLDFRA_sunrise_land.plot.line(
+#     ax=ax2,
+#     color='royalblue',
+#     linewidth=2,
+#     linestyle = '--',
+# 	label='HighCLDFRA-sunrise-land'
+# )
+
+
+fs = 20
+
+ax1.set_xticks(np.arange(0,25,3))
+ax1.set_yticks(np.concatenate(([-100],np.arange(0,1200,200))))
+ax2.set_yticks(np.arange(0,.3,.1))
+title = f'Diurnal Composite of Surface Heat Flux over the MC'
+ax1.set_title(title, fontsize=fs)
+ax2.set_title('', fontsize=fs)
+ax1.set_xlabel(f'{time_type}', fontsize=fs)
+ax1.set_ylabel('Flux [$Wm^{-2}$]', fontsize=fs)
+ax2.set_ylabel('Cloud Fraction', fontsize=fs)
+ax1.set_xticklabels(np.arange(0,25,3), fontsize=fs-6)
+ax1.set_yticklabels(np.concatenate(([-100],np.arange(0,1200,200))), fontsize=fs-6)
+ax2.set_yticklabels(np.arange(0,.3,.1), fontsize=fs-6)
+ax1.grid(linestyle='--', axis='x', linewidth=1)
+ax1.grid(linestyle='--', axis='y', linewidth=1)
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+ax1.legend(ncol=3, fontsize=fs-9, loc='upper left')
+ax2.legend(ncol=3, fontsize=fs-12, loc='upper right')
+ax1.set_xlim([0,24])
+ax1.set_ylim([-150,1000])
+ax2.set_ylim([-.03,.2])
+
+# Save figure
+# fig.savefig('/home/hragnajarian/PhD/plots/DC_HFXandSWSFC.png', transparent=True)
 
 
 # Vertically Integrated Moisture
 
-# In[49]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(8.5,10))
@@ -2839,37 +5536,43 @@ cf3 = x2[37:].plot.contourf(
 
 fs = 20
 
-# Plot phase speed lines
-ax1.plot([-25,137],[9,24] , color='r')
-ax1.text(60, 18, '3 m/s', color='r', weight='bold',fontsize=fs-6)
-ax1.plot([-25,245],[9,24] , color='r')
-ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
-ax1.plot([-25,623],[9,24] , color='r')
-ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+if cross_title == 'Borneo Northwest':
+	# Borneo phase speed lines
+	ax1.plot([-205,-43],[13.5,28.5] , color='r')
+	ax1.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,65],[13.5,28.5] , color='r')
+	ax1.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-205,530],[13.5,30.5] , color='r')
+	ax1.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5-1)
+else:
+	ax1.plot([-45,117],[9,24] , color='r')
+	ax1.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,225],[9,24] , color='r')
+	ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.plot([-45,603],[9,24] , color='r')
+	ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+	ax1.set_yticks(x1.hour[0::3].values+0.5)
 
-
-ax1.set_xlim([x2.Distance[0],x2.Distance[-1]])
-ax1.set_ylim([0,46.5])
 # Plot the vertical line at approximate coastline
 ax1.axvline(x=0, color='k', linestyle='--')
 ax1.axhline(y=0, color='r', linestyle='--', linewidth=3)
 ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
 ax1.set_ylabel('Local Time', fontsize=fs)
-ax1.invert_xaxis()
-ax1.set_yticks(x1.hour[0::3].values+0.5)
+ax1.set_xticks(np.arange(-200,600,100))
+ax1.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+# y_ticks made in the if else statement above ^
 ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
-ax1.set_xticks(np.arange(-200,400,100))
-ax1.set_xticklabels(np.arange(-200,400,100),fontsize=fs-6)
-# ax1.set_yticklabels(np.concatenate((np.arange(0,24,3),np.arange(0,24,3))))
+ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
+ax1.set_ylim([0,46.5])
+ax1.invert_xaxis()
 # Set titles/labels
-# ax1.set_title('Normalized -1/g$\int_{200}^{950}QTotal*dp$ Difference from Control', fontsize=14, loc='center')
-# ax1.set_title('Normalized Vertically-integrated\nQTotal Difference from Control', fontsize=fs, loc='center')
-ax1.set_title('Normalized QTotal|$_{200hPa}^{950hPa}$ Difference from Control', fontsize=fs, loc='center')
+title = 'Normalized QTotal|$_{200hPa}^{950hPa}$ Difference from Control over ' + cross_title
+ax1.set_title(title, fontsize=fs-4)
 
 # Plot the colorbar
 	# Vertical Wind colorbar
 
-	# 
 cax2 = fig.add_subplot(gs[1,0])
 cbar = plt.colorbar(cf2, cax=cax2, orientation='horizontal', pad=0 , aspect=100)
 cbar.set_ticks(np.arange(-3,4,1))
@@ -2877,30 +5580,46 @@ cbar.set_ticklabels(np.arange(-3,4,1), fontsize=fs-6)
 cbar.set_label('[$(QTotal-QTotal_{cntl})/\sigma_{cntl}$]', fontsize=fs-6)
 
 # Save figure
-fig.savefig('/home/hragnajarian/PhD/plots/NormDiff_QTotal.png', transparent=True)
+# fig.savefig('/home/hragnajarian/PhD/plots/NormDiff_QTotal.png', transparent=True)
 
 
 # Doppler Shift Anlaysis
 
-# In[52]:
+# In[ ]:
 
 
-start_LT = 18
-end_LT = 0
+# Subjective times of off-shore propagation 
+if cross_title == 'Borneo Northwest':
+	start_LT = 2
+	end_LT = 8
+	UTC_to_LT = +8
+else:
+	start_LT = 18
+	end_LT = 0
+	UTC_to_LT = +7
+
 
 ptop = 200
 
 # Control
 # [13:-24] ensures that the times we are comparing with NCRF is the same, average over hours, and then over all cross-sections
-NormalWind_cntl = da_d02_cross_NormalWind_cntl[13:-24].groupby('Time.hour').mean().mean('Spread')
+NormalWind_cntl = da_d02_cross_NormalWind_cntl[13:-24]
+NormalWind_cntl['Time'] = NormalWind_cntl['Time']+np.timedelta64(UTC_to_LT,'h')	# Change to LT
+NormalWind_cntl = NormalWind_cntl.groupby('Time.hour').mean().mean('Spread')
 if end_LT < start_LT:
 	NormalWind_cntl = NormalWind_cntl.sel(hour=np.concatenate([np.arange(0,end_LT+1),np.arange(start_LT,24)])).mean('hour')
 else:
 	NormalWind_cntl = NormalWind_cntl.sel(hour=slice(start_LT,end_LT)).mean('hour')
 
 # NCRF Sunrise
+# # Include the first 24 hrs of the CRF Sunrise case, then create a coordinate named Time that corresspond to the hours that are included (starts at 01UTC -> 00 UTC)
+# NormalWind_NCRF = da_d02_cross_NormalWind_CRFoff.sel(Time=slice(0,24),Lead=slice(0,18,2)).assign_coords(Time=('Time',np.concatenate((np.arange(1,24),[0]))))
+# # Average over all the simulations and cross-sections, group by Time and then average 
+# NormalWind_NCRF = NormalWind_NCRF.mean(['Lead','Spread'])
+
+
 # Include the first 24 hrs of the CRF Sunrise case, then create a coordinate named Time that corresspond to the hours that are included (starts at 01UTC -> 00 UTC)
-NormalWind_NCRF = da_d02_cross_NormalWind_CRFoff.sel(Time=slice(0,24),Lead=slice(0,18,2)).assign_coords(Time=('Time',np.concatenate((np.arange(1,24),[0]))))
+NormalWind_NCRF = da_d02_cross_NormalWind_CRFoff.sel(Time=slice(0,24),Lead=slice(0,18,2)).assign_coords(Time=('Time',np.concatenate((np.arange(1+UTC_to_LT,24),np.arange(0,UTC_to_LT+1)))))
 # Average over all the simulations and cross-sections, group by Time and then average 
 NormalWind_NCRF = NormalWind_NCRF.mean(['Lead','Spread']).groupby('Time').mean().rename({'Time':'hour'})
 if end_LT < start_LT:
@@ -2909,6 +5628,7 @@ else:
 	NormalWind_NCRF = NormalWind_NCRF.sel(hour=slice(start_LT,end_LT)).mean('hour')
 
 NormalWind_Diff = NormalWind_NCRF - NormalWind_cntl
+# NormalWind_Diff = NormalWind_cntl
 
 # Smooth the data a little bit
 smoothing_num = 3
@@ -2933,7 +5653,7 @@ cf1 = NormalWind_Diff.plot.contourf(
 	ax=ax1,
 	add_colorbar=False,
 	# levels=np.arange(-10,10.5,.5),
-	levels=np.arange(-1.5,1.75,.25),
+	levels=np.arange(-2,2.25,.25),
 	cmap='RdBu_r',
 	yscale='log',
 	ylim=[ptop,1000],
@@ -2945,65 +5665,475 @@ fs = 20
 ax1.axvline(x=0, color='k', linestyle='--')
 ax1.set_ylabel('Pressure Levels [hPa]', fontsize=fs)
 ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
-ax1.invert_yaxis()
-ax1.invert_xaxis()
 
-string = f'Averaged Normal Wind Difference from Control\n {start_LT:.0f}-{end_LT:.0f}LT'
-ax1.set_title(string, fontsize=fs)
+string = f'Normal Wind Difference from Control: {cross_title:s}\n (NCRF - CNTL) {start_LT:.0f}-{end_LT:.0f}LT'
+ax1.set_title(string, fontsize=fs-4)
 yticks = np.linspace(1000,100,10)
 ax1.set_yticks(yticks)
 ax1.set_yticklabels(yticks, fontsize=fs-6)
-xticks = np.arange(-200,400,100)
+xticks = np.arange(-200,600,100)
 ax1.set_xticks(xticks)
 ax1.set_xticklabels(xticks, fontsize=fs-6)
 ax1.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-ax1.set_ylim([1000,ptop+1])
+ax1.set_ylim([1000,ptop])
+ax1.set_xlim([NormalWind_cntl.Distance[0],NormalWind_cntl.Distance[-1]])
+# ax1.invert_yaxis()
+ax1.invert_xaxis()
 
 ax3 = fig.add_subplot(gs[1,0])
 cbar = plt.colorbar(cf1, cax=ax3, orientation='horizontal', pad=0 , aspect=100, extend='max')
-cbar.set_ticks(np.arange(-1.5,2,0.5))
-cbar.set_ticklabels(np.arange(-1.5,2,0.5), fontsize=fs-6)
+cbar.set_ticks(np.arange(-2,2.5,0.5))
+cbar.set_ticklabels(np.arange(-2,2.5,0.5), fontsize=fs-6)
 cbar.set_label("Normal Wind' [$m/s$]", fontsize=fs-6)
 cbar.minorticks_off()
 
 # Save figure
-fig.savefig('/home/hragnajarian/PhD/plots/DailyAvgDiff_NormalWind.png', transparent=True)
+# fig.savefig('/home/hragnajarian/PhD/plots/DailyAvgDiff_NormalWind.png', transparent=True)
 
 
 # ## Spatial Analysis
 
-# ### Diurnal Amplitude
+# ### Diurnal SW SFC Flux Amplitude
 
-# In[42]:
+# In[31]:
 
 
 # Data
-rolls = 1
+rolls = 5
 lon_bound = [90,125]
 lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
 
 # Moving average to "denoise"
-data = da_d02_RR.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = da_d02_SWSFC.sel(Time=slice(time_bound[0],time_bound[1])).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
 data = data.groupby('Time.hour').mean('Time')
 # Find the max and min values
 x = data.max(dim='hour', keep_attrs=True)
 y = data.min(dim='hour', keep_attrs=True)
+amplitude_SWSFC_cntl = x-y
+amplitude_SWSFC_cntl_land = xr.where(da_d02_LANDMASK==1, amplitude_SWSFC_cntl, np.nan)
+amplitude_SWSFC_cntl_ocean = xr.where(da_d02_LANDMASK==0, amplitude_SWSFC_cntl, np.nan)
 
-amplitude = x-y
+# Moving average to "denoise"
+data = da_d02_sunrise_SWSFC.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = data.groupby('Time.hour').mean('Time')
+# Find the max and min values
+x = data.max(dim='hour', keep_attrs=True)
+y = data.min(dim='hour', keep_attrs=True)
+amplitude_SWSFC_sunrise = x-y
+amplitude_SWSFC_sunrise_land = xr.where(da_d02_LANDMASK==1, amplitude_SWSFC_sunrise, np.nan)
+amplitude_SWSFC_sunrise_ocean = xr.where(da_d02_LANDMASK==0, amplitude_SWSFC_sunrise, np.nan)
+
+# Difference
+amplitude_SWSFC_diff =  amplitude_SWSFC_sunrise - amplitude_SWSFC_cntl
+amplitude_SWSFC_diff_land = xr.where(da_d02_LANDMASK==1, amplitude_SWSFC_diff, np.nan)
+amplitude_SWSFC_diff_ocean = xr.where(da_d02_LANDMASK==0, amplitude_SWSFC_diff, np.nan)
 
 
-# In[43]:
+# In[133]:
+
+
+###############################################################################################################################
+###### This version groupby is done day-by-day while the above version does a diurnal composite. Both perform similarly. ######
+###############################################################################################################################
+# Data
+rolls = 1
+lon_bound = [90,125]
+lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
+
+# Moving average to "denoise"
+data = da_d02_SWSFC.sel(Time=slice(time_bound[0],time_bound[1]))#.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+# Find the max and min values
+x = data.groupby('Time.day').max('Time')
+y = data.groupby('Time.day').min('Time')
+amplitude_SWSFC_cntl = x-y
+amplitude_SWSFC_cntl_land = xr.where(da_d02_LANDMASK==1, amplitude_SWSFC_cntl, np.nan)
+amplitude_SWSFC_cntl_ocean = xr.where(da_d02_LANDMASK==0, amplitude_SWSFC_cntl, np.nan)
+
+# Moving average to "denoise"
+data = da_d02_sunrise_SWSFC#.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+# Find the max and min values
+x = data.groupby('Time.day').max('Time')
+y = data.groupby('Time.day').min('Time')
+amplitude_SWSFC_sunrise = x-y
+amplitude_SWSFC_sunrise_land = xr.where(da_d02_LANDMASK==1, amplitude_SWSFC_sunrise, np.nan)
+amplitude_SWSFC_sunrise_ocean = xr.where(da_d02_LANDMASK==0, amplitude_SWSFC_sunrise, np.nan)
+
+# Difference
+amplitude_SWSFC_diff =  amplitude_SWSFC_sunrise - amplitude_SWSFC_cntl
+amplitude_SWSFC_diff_land = xr.where(da_d02_LANDMASK==1, amplitude_SWSFC_diff, np.nan)
+amplitude_SWSFC_diff_ocean = xr.where(da_d02_LANDMASK==0, amplitude_SWSFC_diff, np.nan)
+
+
+# In[34]:
+
+
+probability_density = True
+
+a = plt.hist(amplitude_SWSFC_diff.values.flatten(),bins=np.arange(-112.5,412.5,25), label=f'Domain n ={len(amplitude_SWSFC_diff.values.flatten())}', density=probability_density, histtype='step', color='k')
+b = plt.hist(amplitude_SWSFC_diff_ocean.values.flatten(), bins=np.arange(-112.5,412.5,25), label=f'Ocean n = {np.nansum(~np.isnan(amplitude_SWSFC_diff_ocean.values.flatten()))}', density=probability_density, histtype='step', color='dodgerblue')
+c = plt.hist(amplitude_SWSFC_diff_land.values.flatten(), bins=np.arange(-112.5,412.5,25), label=f'Land n = {np.nansum(~np.isnan(amplitude_SWSFC_diff_land.values.flatten()))}', density=probability_density, histtype='step', color='peru')
+plt.title(f'Diurnal SW SFC Amplitude Difference (NCRF - CNTL)\nRolling n: {rolls}')
+plt.xlabel('(W/m^2)')
+if probability_density: plt.ylabel('Fractional count')
+else: plt.ylabel('# of grids')
+plt.legend()
+
+
+# ### Diurnal HFX Amplitude
+
+# In[37]:
+
+
+# Data
+rolls = 5
+lon_bound = [90,125]
+lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
+
+# Moving average to "denoise"
+data = da_d02_HFX.sel(Time=slice(time_bound[0],time_bound[1])).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = data.groupby('Time.hour').mean('Time')
+# Find the max and min values
+x = data.max(dim='hour', keep_attrs=True)
+y = data.min(dim='hour', keep_attrs=True)
+amplitude_HFX_cntl = x-y
+amplitude_HFX_cntl_land = xr.where(da_d02_LANDMASK==1, amplitude_HFX_cntl, np.nan)
+amplitude_HFX_cntl_ocean = xr.where(da_d02_LANDMASK==0, amplitude_HFX_cntl, np.nan)
+
+# Moving average to "denoise"
+data = da_d02_sunrise_HFX.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = data.groupby('Time.hour').mean('Time')
+# Find the max and min values
+x = data.max(dim='hour', keep_attrs=True)
+y = data.min(dim='hour', keep_attrs=True)
+amplitude_HFX_sunrise = x-y
+amplitude_HFX_sunrise_land = xr.where(da_d02_LANDMASK==1, amplitude_HFX_sunrise, np.nan)
+amplitude_HFX_sunrise_ocean = xr.where(da_d02_LANDMASK==0, amplitude_HFX_sunrise, np.nan)
+
+# Difference
+amplitude_HFX_diff = amplitude_HFX_sunrise - amplitude_HFX_cntl
+amplitude_HFX_diff_land = xr.where(da_d02_LANDMASK==1, amplitude_HFX_diff, np.nan)
+amplitude_HFX_diff_ocean = xr.where(da_d02_LANDMASK==0, amplitude_HFX_diff, np.nan)
+
+
+# In[132]:
+
+
+###############################################################################################################################
+###### This version groupby is done day-by-day while the above version does a diurnal composite. Both perform similarly. ######
+###############################################################################################################################
+# Data
+rolls = 1
+lon_bound = [90,125]
+lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
+
+# Moving average to "denoise"
+data = da_d02_HFX.sel(Time=slice(time_bound[0],time_bound[1]))#.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+# Find the max and min values
+x = data.groupby('Time.day').max('Time')
+y = data.groupby('Time.day').min('Time')
+amplitude_HFX_cntl = x-y
+amplitude_HFX_cntl_land = xr.where(da_d02_LANDMASK==1, amplitude_HFX_cntl, np.nan)
+amplitude_HFX_cntl_ocean = xr.where(da_d02_LANDMASK==0, amplitude_HFX_cntl, np.nan)
+
+# Moving average to "denoise"
+data = da_d02_sunrise_HFX#.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+# Find the max and min values
+x = data.groupby('Time.day').max('Time')
+y = data.groupby('Time.day').min('Time')
+amplitude_HFX_sunrise = x-y
+amplitude_HFX_sunrise_land = xr.where(da_d02_LANDMASK==1, amplitude_HFX_sunrise, np.nan)
+amplitude_HFX_sunrise_ocean = xr.where(da_d02_LANDMASK==0, amplitude_HFX_sunrise, np.nan)
+
+# Difference
+amplitude_HFX_diff =  amplitude_HFX_sunrise - amplitude_HFX_cntl
+amplitude_HFX_diff_land = xr.where(da_d02_LANDMASK==1, amplitude_HFX_diff, np.nan)
+amplitude_HFX_diff_ocean = xr.where(da_d02_LANDMASK==0, amplitude_HFX_diff, np.nan)
+
+
+# In[40]:
+
+
+probability_density = True
+
+a = plt.hist(amplitude_HFX_diff.values.flatten(),bins=np.arange(-10,210,20), label=f'Domain n ={len(amplitude_HFX_diff.values.flatten())}', density=probability_density, histtype='step', color='k')
+b = plt.hist(amplitude_HFX_diff_ocean.values.flatten(), bins=np.arange(-10,210,20), label=f'Ocean n = {np.nansum(~np.isnan(amplitude_HFX_diff_ocean.values.flatten()))}', density=probability_density, histtype='step', color='dodgerblue')
+c = plt.hist(amplitude_HFX_diff_land.values.flatten(), bins=np.arange(-10,210,20), label=f'Land n = {np.nansum(~np.isnan(amplitude_HFX_diff_land.values.flatten()))}', density=probability_density, histtype='step', color='peru')
+plt.title(f'Diurnal HFX Amplitude Difference (NCRF - CNTL)\nRolling n: {rolls}')
+plt.xlabel('(W/m^2)')
+if probability_density: plt.ylabel('Fractional count')
+else: plt.ylabel('# of grids')
+plt.legend()
+
+
+# In[41]:
 
 
 fig = plt.figure(figsize=(16,8))
 gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
 ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
 
-cf = amplitude.plot.contourf(
+cf = amplitude_HFX_cntl.plot.contourf(
         ax=ax1,
         add_colorbar=False,
         cmap='gray_r',
-        levels=np.arange(0,11,1),
+        levels=np.arange(0,825,25),
+        vmin=0, vmax=825,
+        x='west_east',
+        y='south_north',
+        xlim=[lon_bound[0], lon_bound[1]],
+        ylim=[lat_bound[0], lat_bound[1]],
+        extend='max',
+    )
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+# ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title('Control Diurnal HFX Amplitude', loc='center')
+ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(0,900,100))
+cbar.set_label('Diurnal HFX Amplitude (W/m^2)')
+
+
+# In[42]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+cf = amplitude_HFX_diff.plot.contourf(
+        ax=ax1,
+        add_colorbar=False,
+        cmap='RdBu_r',
+        levels=np.arange(-100,120,20),
+        x='west_east',
+        y='south_north',
+        xlim=[lon_bound[0], lon_bound[1]],
+        ylim=[lat_bound[0], lat_bound[1]],
+        extend='both',
+    )
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title('Diurnal HFX Amplitude Difference (NCRF - CNTL)', loc='center')
+ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(-100,150,50))
+cbar.set_label('Diurnal HFX Amplitude (W/m^2)')
+
+
+# ### Diurnal RR Amplitude
+
+# In[46]:
+
+
+# Data
+rolls = 5
+lon_bound = [90,125]
+lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
+
+# Moving average to "denoise"
+RR_cntl = da_d02_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy().chunk({'Time':5}).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+RR_cntl = assign_LT_coord(RR_cntl,dim_num=3)	# Create a local time coordinte
+# Group by local time and the 'dim' parameter ensures only the Time dimension is mean'd/averaged into the 'hour' dimension
+RR_cntl = xarray_reduce(RR_cntl, 'LocalTime.hour', func='mean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False]).transpose('hour','west_east','south_north')
+# Find the max and min values
+x = RR_cntl.max(dim='hour', keep_attrs=True)
+y = RR_cntl.min(dim='hour', keep_attrs=True)
+amplitude_RR_cntl = x-y
+amplitude_RR_cntl_land = xr.where(da_d02_LANDMASK==1, amplitude_RR_cntl, np.nan)
+amplitude_RR_cntl_ocean = xr.where(da_d02_LANDMASK==0, amplitude_RR_cntl, np.nan)
+
+# First adjust data where there are negative RR's.
+RR_sunrise = da_d02_sunrise_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy().chunk({'Time':5})
+inds = np.unique(np.argwhere(RR_sunrise.values<0)[:,0])	# Time steps where RR is negative due to stitching over many simulations
+RR_sunrise[inds] = (RR_sunrise[inds-1].values + RR_sunrise[inds+1].values) / 2
+RR_sunrise = assign_LT_coord(RR_sunrise,dim_num=3).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()	# Create a local time coordinte
+# Group by local time and the 'dim' parameter ensures only the Time dimension is mean'd/averaged into the 'hour' dimension
+RR_sunrise = xarray_reduce(RR_sunrise, 'LocalTime.hour', func='mean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False]).transpose('hour','west_east','south_north')
+# Find the max and min values
+x = RR_sunrise.max(dim='hour', keep_attrs=True)
+y = RR_sunrise.min(dim='hour', keep_attrs=True)
+amplitude_RR_sunrise = x-y
+amplitude_RR_sunrise_land = xr.where(da_d02_LANDMASK==1, amplitude_RR_sunrise, np.nan)
+amplitude_RR_sunrise_ocean = xr.where(da_d02_LANDMASK==0, amplitude_RR_sunrise, np.nan)
+
+# Difference
+amplitude_RR_diff =  amplitude_RR_sunrise - amplitude_RR_cntl
+amplitude_RR_diff_land = xr.where(da_d02_LANDMASK==1, amplitude_RR_diff, np.nan)
+amplitude_RR_diff_ocean = xr.where(da_d02_LANDMASK==0, amplitude_RR_diff, np.nan)
+
+
+# In[ ]:
+
+
+###############################################################################################################################
+###### This version groupby is done day-by-day while the above version does a diurnal composite. Both perform similarly. ######
+###############################################################################################################################
+
+# Data
+rolls = 5
+lon_bound = [90,125]
+lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
+
+# Moving average to "denoise"
+RR_cntl = da_d02_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy().chunk({'Time':5}).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+RR_cntl = assign_LT_coord(RR_cntl,dim_num=3)	# Create a local time coordinte
+# Group by local time and the 'dim' parameter ensures only the Time dimension is mean'd/averaged into the 'day' dimension
+RR_cntl = xarray_reduce(RR_cntl, 'LocalTime.day', func='mean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False]).transpose('day','west_east','south_north')
+# Find the max and min values
+x = RR_cntl.max(dim='day', keep_attrs=True)
+y = RR_cntl.min(dim='day', keep_attrs=True)
+amplitude_RR_cntl = x-y
+amplitude_RR_cntl_land = xr.where(da_d02_LANDMASK==1, amplitude_RR_cntl, np.nan)
+amplitude_RR_cntl_ocean = xr.where(da_d02_LANDMASK==0, amplitude_RR_cntl, np.nan)
+
+# First adjust data where there are negative RR's.
+RR_sunrise = da_d02_sunrise_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy().chunk({'Time':5})
+inds = np.unique(np.argwhere(RR_sunrise.values<0)[:,0])	# Time steps where RR is negative due to stitching over many simulations
+RR_sunrise[inds] = (RR_sunrise[inds-1].values + RR_sunrise[inds+1].values) / 2
+RR_sunrise = assign_LT_coord(RR_sunrise,dim_num=3).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()	# Create a local time coordinte
+# Group by local time and the 'dim' parameter ensures only the Time dimension is mean'd/averaged into the 'day' dimension
+RR_sunrise = xarray_reduce(RR_sunrise, 'LocalTime.day', func='mean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False]).transpose('day','west_east','south_north')
+# Find the max and min values
+x = RR_sunrise.max(dim='day', keep_attrs=True)
+y = RR_sunrise.min(dim='day', keep_attrs=True)
+amplitude_RR_sunrise = x-y
+amplitude_RR_sunrise_land = xr.where(da_d02_LANDMASK==1, amplitude_RR_sunrise, np.nan)
+amplitude_RR_sunrise_ocean = xr.where(da_d02_LANDMASK==0, amplitude_RR_sunrise, np.nan)
+
+
+# In[47]:
+
+
+probability_density = True
+
+a = plt.hist(amplitude_RR_diff.values.flatten(),bins=np.arange(-11,21,2), label=f'Domain n ={len(amplitude_RR_diff.values.flatten())}',density=probability_density, histtype='step', color='k')
+b = plt.hist(amplitude_RR_diff_ocean.values.flatten(),bins=np.arange(-11,21,2), label=f'Ocean n = {np.nansum(~np.isnan(amplitude_RR_diff_ocean.values.flatten()))}',density=probability_density, histtype='step', color='dodgerblue')
+c = plt.hist(amplitude_RR_diff_land.values.flatten(),bins=np.arange(-11,21,2), label=f'Land n = {np.nansum(~np.isnan(amplitude_RR_diff_land.values.flatten()))}',density=probability_density, histtype='step', color='peru')
+plt.title(f'Diurnal RR Amplitude Difference (NCRF - CNTL)\nRolling n: {rolls}')
+plt.xlabel('(mm/hr)')
+if probability_density: plt.ylabel('Fractional count')
+else: plt.ylabel('# of grids')
+plt.legend()
+
+
+# In[58]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+cf = amplitude_RR_cntl.plot.contourf(
+        ax=ax1,
+        add_colorbar=False,
+        cmap='gray_r',
+        levels=np.arange(0-.5,11+1+.5,1),
         vmin=0, vmax=11,
         x='west_east',
         y='south_north',
@@ -3061,46 +6191,173 @@ ax1.set_yticklabels(y_tick_labels)
 ax1.set_xlabel('')
 ax1.set_ylabel('')
 
-ax1.set_title('WRF Diurnal Amplitude', loc='center')
+ax1.set_title('Control Diurnal Amplitude', loc='center')
 ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
 
 ax2 = fig.add_subplot(gs[1,1])
-cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(0,11,1))
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(0,11+1,1))
 cbar.set_label('Diurnal Amplitude (mm/day)')
 
 
-# ### Diurnal Maximum
+# In[59]:
 
-# In[122]:
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+levels = [-10, 10]
+dl = 1
+
+cf = amplitude_RR_diff.plot.contourf(
+    ax=ax1,
+    add_colorbar=False,
+    cmap='RdBu_r',
+    # levels=np.arange(-10,11,1),
+    levels=np.arange(levels[0]-(dl/2),levels[1]+dl+(dl/2),dl),
+    vmin=levels[0], vmax=levels[1],
+    x='west_east',
+    y='south_north',
+	extend='both',
+    xlim=[lon_bound[0], lon_bound[1]],
+    ylim=[lat_bound[0], lat_bound[1]],
+)
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title('Diurnal Amplitude Difference (NCRF - CNTL)', loc='center')
+ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
+
+ax2 = fig.add_subplot(gs[1,1])
+# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(-10,12,2))
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(levels[0],levels[1]+1,dl+1))
+cbar.minorticks_off()
+cbar.set_label('Diurnal Amplitude Anomaly (mm/day)')
+
+
+# ### Diurnal RR Phase Maximum
+
+# In[60]:
 
 
 # Data
 rolls = 5
 lon_bound = [90,125]
 lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
 
 # Moving average to "denoise"
-x = da_d02_RR.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
-x = x.groupby('Time.hour').mean('Time')
+data = da_d02_RR.sel(Time=slice(time_bound[0],time_bound[1])).rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = data.groupby('Time.hour').mean('Time')
 # Find the time it maximizes
-x = x.idxmax('hour',keep_attrs=True)
+phase_max_cntl = data.idxmax('hour',keep_attrs=True)		# makes it 0-23
+
+# Adjust data where there are negative RR's.
+data = da_d02_sunrise_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy()
+inds = np.unique(np.argwhere(data.values<0)[:,0])	# Time steps where RR is negative due to stitching over many simulations
+data[inds] = (data[inds-1].values + data[inds+1].values) / 2
+# Moving average to "denoise"
+data = data.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = data.groupby('Time.hour').mean('Time')
+# Find the time it maximizes
+phase_max_sunrise = data.idxmax('hour',keep_attrs=True)		# makes it 0-23
+
+phase_max_diff =   phase_max_sunrise - phase_max_cntl
+
+# When taking the difference of times, you need to make sure the distribution is between -12->11 or -11->12
+	# depending on the order of the difference
+phase_max_diff_adj = xr.where((phase_max_diff<=-13), phase_max_diff+24, phase_max_diff)
+phase_max_diff_adj = xr.where((phase_max_diff>=12),phase_max_diff-24, phase_max_diff_adj)
+
+phase_max_diff_adj_land = xr.where(da_d02_LANDMASK==1,phase_max_diff_adj,np.nan)
+phase_max_diff_adj_ocean = xr.where(da_d02_LANDMASK==0,phase_max_diff_adj,np.nan)
+
+
+# In[61]:
+
+
+probability_density = True
+
+a = plt.hist(phase_max_diff_adj.values.flatten(),bins=np.arange(-14.5,13.5,1), label=f'Domain n = {len(phase_max_diff_adj.values.flatten())}',density=probability_density, histtype='step', color='k')
+b = plt.hist(phase_max_diff_adj_ocean.values.flatten(),bins=np.arange(-14.5,13.5,1), label=f'Ocean n = {np.nansum(~np.isnan(phase_max_diff_adj_ocean.values.flatten()))}',density=probability_density, histtype='step', color='dodgerblue')
+c = plt.hist(phase_max_diff_adj_land.values.flatten(),bins=np.arange(-14.5,13.5,1), label=f'Land n = {np.nansum(~np.isnan(phase_max_diff_adj_land.values.flatten()))}',density=probability_density, histtype='step', color='peru')
+plt.title(f'Diurnal Maximum Timing Difference (NCRF - CNTL)\nRolling n: {rolls}')
+plt.xlabel('Hours')
+if probability_density: plt.ylabel('Fractional count')
+else: plt.ylabel('# of grids')
+plt.legend()
+
+
+# In[62]:
+
 
 fig = plt.figure(figsize=(16,8))
-gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.1,.8,.1])
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
 ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
 
-levels = [0,24]
+levels = [0,23]
 dl = 1
-cf = x.plot.contourf(
-        ax=ax1,
-        add_colorbar=False,
-        cmap='hsv',
-        levels=np.arange(levels[0],levels[1],dl),
-        vmin=0, vmax=levels[1]-dl,
-        x='west_east',
-        y='south_north',
-        xlim=[lon_bound[0], lon_bound[1]],
-        ylim=[lat_bound[0], lat_bound[1]],
+cf = phase_max_cntl.plot.contourf(
+    ax=ax1,
+    add_colorbar=False,
+    cmap='hsv',
+    # levels=np.arange(levels[0],levels[1],dl),
+    levels=np.arange(levels[0]-(dl/2),levels[1]+1+(dl/2),dl),
+    # vmin=0, vmax=levels[1]-dl,
+    vmin=levels[0], vmax=levels[1],
+    x='west_east',
+    y='south_north',
+    xlim=[lon_bound[0], lon_bound[1]],
+    ylim=[lat_bound[0], lat_bound[1]],
+		extend='neither'
     )
 
 # Western Central Sumatra
@@ -3153,19 +6410,1836 @@ ax1.set_yticklabels(y_tick_labels)
 ax1.set_xlabel('')
 ax1.set_ylabel('')
 
-ax1.set_title('WRF Diurnal Maximum in UTC', loc='center')
+ax1.set_title('Control Diurnal Phase Maximum', loc='center')
 ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
 
 ax2 = fig.add_subplot(gs[1,1])
-cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(0,24,3))
+# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(0,24,3))
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='neither', ticks=np.arange(levels[0],levels[1]+1,dl+2))
+cbar.minorticks_off()
 cbar.set_label('UTC')
+
+
+# In[63]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+levels = [-6,6]
+dl = 1
+cf = phase_max_diff_adj.plot.contourf(
+    ax=ax1,
+    add_colorbar=False,
+    cmap='RdBu_r',
+    levels=np.arange(levels[0]-(dl/2),levels[1]+1+(dl/2),dl),
+    vmin=levels[0], vmax=levels[1],
+    x='west_east',
+    y='south_north',
+    xlim=[lon_bound[0], lon_bound[1]],
+    ylim=[lat_bound[0], lat_bound[1]],
+		extend='both'
+    )
+
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title('Diurnal Maximum Timing Difference (NCRF - CNTL)', loc='center')
+ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(levels[0],levels[1]+1,dl+1))
+cbar.minorticks_off()
+cbar.set_label('Hours')
+
+
+# ### Diurnal RR Phase >1mm/hr
+
+# In[32]:
+
+
+# Data
+rolls = 5
+lon_bound = [90,125]
+lat_bound = [-10,10]
+time_bound = ['2015-11-23T02','2015-12-02T00']
+
+# Moving average to "denoise"
+data = da_d02_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy().rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+data = data.groupby('Time.hour').mean('Time')
+
+# Find the time it maximizes
+phase_max_cntl = data.idxmax('hour',keep_attrs=True)
+# Find the time it rains more than the set threshold rain rate while rain rate is increasing d(RR)/dt>0
+	# Find rain rates >=threshold_RR, sort it going from lowest to highest, and extract the first index/hour
+threshhold_RR = 1
+threshold_dRRdt = 0
+dRR_dt = xr.concat([data,data[0]], dim='hour').diff(dim='hour')
+RR_above_thresh = xr.where((data>=threshhold_RR)&(dRR_dt>threshold_dRRdt), data, 999).values
+initiation_hours = np.argsort(RR_above_thresh,axis=0)[0,:,:]
+# If the RR is the fill value AND it is the first index of time, it is an area that did not recieve >threshold_RR rain rate
+phase_initiation_cntl = np.where((RR_above_thresh[0,:,:]==999)&(initiation_hours==0), np.nan, initiation_hours)
+phase_initiation_cntl = xr.DataArray(
+	data=phase_initiation_cntl,
+	dims=['south_north','west_east'],
+	coords=dict(
+		south_north = ('south_north', d02_coords['south_north'][1]),
+		west_east = ('west_east', d02_coords['west_east'][1])),
+)
+
+# Moving average to "denoise"
+data = da_d02_sunrise_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy().rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+inds = np.unique(np.argwhere(data.values<0)[:,0])	# Time steps where RR is negative due to stitching over many simulations
+data[inds] = (data[inds-1].values + data[inds+1].values) / 2
+data = data.groupby('Time.hour').mean('Time')
+# Find the time it maximizes
+phase_max_sunrise = data.idxmax('hour',keep_attrs=True)
+# Find the time it rains more than threshold rain rate
+	# Find rain rates >=threshold_RR, sort it going from lowest to highest, and extract the first index/hour
+dRR_dt = xr.concat([data,data[0]], dim='hour').diff(dim='hour')
+RR_above_thresh = xr.where((data>=threshhold_RR)&(dRR_dt>threshold_dRRdt), data, 999).values
+initiation_hours = np.argsort(RR_above_thresh,axis=0)[0,:,:]
+# If the RR is the fill value AND it is the first index of time, it is an area that did not recieve >threshold_RR rain rate
+phase_initiation_sunrise = np.where((RR_above_thresh[0,:,:]==999)&((initiation_hours==0)), np.nan, initiation_hours)
+phase_initiation_sunrise = xr.DataArray(
+	data=phase_initiation_sunrise,
+	dims=['south_north','west_east'],
+	coords=dict(
+		south_north = ('south_north', d02_coords['south_north'][1]),
+		west_east = ('west_east', d02_coords['west_east'][1])),
+)
+
+phase_initiation_diff = phase_initiation_sunrise - phase_initiation_cntl
+
+# When taking the difference of times, you need to make sure the distribution is between -12->11 or -11->12
+	# depending on the order of the difference
+phase_initiation_diff_adj = xr.where((phase_initiation_diff<=-12), phase_initiation_diff+24, phase_initiation_diff)
+phase_initiation_diff_adj = xr.where((phase_initiation_diff>=13), phase_initiation_diff-24, phase_initiation_diff_adj)
+
+phase_initiation_diff_adj_land = xr.where(da_d02_LANDMASK==1,phase_initiation_diff_adj,np.nan)
+phase_initiation_diff_adj_ocean = xr.where(da_d02_LANDMASK==0,phase_initiation_diff_adj,np.nan)
+
+
+# In[96]:
+
+
+probability_density = True
+
+a = plt.hist(phase_initiation_diff_adj.values.flatten(),bins=np.arange(-13.5,14.5,1), label=f'Domain n = {np.nansum(~np.isnan(phase_initiation_diff_adj.values.flatten()))}',density=probability_density, histtype='step', color='k')
+b = plt.hist(phase_initiation_diff_adj_ocean.values.flatten(),bins=np.arange(-13.5,14.5,1), label=f'Ocean n = {np.nansum(~np.isnan(phase_initiation_diff_adj_ocean.values.flatten()))}',density=probability_density, histtype='step', color='dodgerblue')
+c = plt.hist(phase_initiation_diff_adj_land.values.flatten(),bins=np.arange(-13.5,14.5,1), label=f'Land n = {np.nansum(~np.isnan(phase_initiation_diff_adj_land.values.flatten()))}',density=probability_density, histtype='step', color='peru')
+plt.title(f'Diurnal Initiation Timing Difference (NCRF - CNTL)\n Rolling n: {rolls}, Threshold: >{threshhold_RR}mm/d')
+plt.xlabel('Hours')
+
+if probability_density: plt.ylabel('Fractional count'), plt.ylim([0,.2])
+else: plt.ylabel('# of grids')
+plt.legend()
+
+
+# In[66]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+levels = [0,23]
+dl = 1
+cf = phase_initiation_cntl.plot.contourf(
+    ax=ax1,
+    add_colorbar=False,
+    cmap='hsv',
+    # levels=np.arange(levels[0],levels[1],dl),
+    levels=np.arange(levels[0]-(dl/2),levels[1]+1+(dl/2),dl),
+    # vmin=0, vmax=levels[1]-dl,
+    vmin=levels[0], vmax=levels[1],
+    x='west_east',
+    y='south_north',
+    xlim=[lon_bound[0], lon_bound[1]],
+    ylim=[lat_bound[0], lat_bound[1]],
+		extend='neither'
+    )
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title(f'Control Diurnal Initiation Time (>{threshhold_RR}mm/d)', loc='center')
+ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
+
+ax2 = fig.add_subplot(gs[1,1])
+# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(0,24,3))
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='neither', ticks=np.arange(levels[0],levels[1]+1,dl+2))
+cbar.minorticks_off()
+cbar.set_label('UTC')
+
+
+# In[186]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+levels = [-12,12]
+levels = [-6,6]
+dl = 1
+rolls = 1
+x = phase_initiation_diff_adj.rolling({'south_north':rolls, 'west_east':rolls}, min_periods=1, center=True).mean()
+cf = x.plot.contourf(
+    ax=ax1,
+    add_colorbar=False,
+    cmap='RdBu_r',
+    levels=np.arange(levels[0]-(dl/2),levels[1]+1+(dl/2),dl),
+    vmin=levels[0], vmax=levels[1],
+    x='west_east',
+    y='south_north',
+    xlim=[lon_bound[0], lon_bound[1]],
+    ylim=[lat_bound[0], lat_bound[1]],
+		extend='both'
+    )
+
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title(f'Diurnal Initiation Timing Difference\n(>{threshhold_RR}mm/d) (NCRF - CNTL)', loc='center')
+ax1.set_title(f'Center smooth # of grids: {rolls}', loc='right')
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(levels[0],levels[1]+1,dl+1))
+cbar.minorticks_off()
+cbar.set_label('Hours')
+
+
+# ### Diurnal RR Vs HFX Amplitude
+
+# In[100]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+
+if domain=='Land':
+	# Land
+	da2 = linreg(amplitude_RR_diff_land.values.flatten()[~np.isnan(amplitude_RR_diff_land.values.flatten())], amplitude_HFX_diff_land.values.flatten()[~np.isnan(amplitude_HFX_diff_land.values.flatten())], min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(amplitude_RR_diff_ocean.values.flatten()[~np.isnan(amplitude_RR_diff_ocean.values.flatten())], amplitude_HFX_diff_ocean.values.flatten()[~np.isnan(amplitude_HFX_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(amplitude_RR_diff.values.flatten()[~np.isnan(amplitude_RR_diff.values.flatten())], amplitude_HFX_diff.values.flatten()[~np.isnan(amplitude_HFX_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	s1 = ax1.scatter(amplitude_RR_diff_land, amplitude_HFX_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(amplitude_RR_diff_ocean, amplitude_HFX_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(amplitude_RR_diff, amplitude_HFX_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+ax1.text(-7.5,255, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal RR and HFX Amplitude Relationship\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_xlabel('Anomalous RR Amplitude [$mm/hr$]',fontsize=10)
+ax1.set_ylabel('Anomalous HFX Ampltude [$W/m^{2}$]',fontsize=10)
+ax1.set_xlim([-10,20])
+ax1.set_ylim([-50,300])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+# In[101]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+# fig.suptitle(f'Time series relationship over 0->{land_dist_thresh:.0f} km during {time_start:.0f}-{time_end:.0f}UTC between Cloud Fraction and SW CRF @ Surface', fontsize=14)
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+
+if domain=='Land':
+	# Land
+	da2 = linreg(amplitude_SWSFC_diff_land.values.flatten()[~np.isnan(amplitude_SWSFC_diff_land.values.flatten())], amplitude_HFX_diff_land.values.flatten()[~np.isnan(amplitude_HFX_diff_land.values.flatten())], min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(amplitude_SWSFC_diff_ocean.values.flatten()[~np.isnan(amplitude_SWSFC_diff_ocean.values.flatten())], amplitude_HFX_diff_ocean.values.flatten()[~np.isnan(amplitude_HFX_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(amplitude_SWSFC_diff.values.flatten()[~np.isnan(amplitude_SWSFC_diff.values.flatten())], amplitude_HFX_diff.values.flatten()[~np.isnan(amplitude_HFX_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	s1 = ax1.scatter(amplitude_SWSFC_diff_land, amplitude_HFX_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(amplitude_SWSFC_diff_ocean, amplitude_HFX_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(amplitude_SWSFC_diff, amplitude_HFX_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+l2 = ax1.plot([-50,1000],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-50, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*1000],'r',linestyle='--')
+slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+ax1.text(25, 275, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal SW SFC and HFX Amplitude Relationship\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_xlabel('Anomalous SW SFC Amplitude [$W/m^{2}$]',fontsize=10)
+ax1.set_ylabel('Anomalous HFX Amplitude [$W/m^{2}$]',fontsize=10)
+ax1.set_xlim([0,700])
+ax1.set_ylim([-50,300])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+# In[60]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+# fig.suptitle(f'Time series relationship over 0->{land_dist_thresh:.0f} km during {time_start:.0f}-{time_end:.0f}UTC between Cloud Fraction and SW CRF @ Surface', fontsize=14)
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+
+if domain=='Land':
+	# Land
+	da2 = linreg(amplitude_SWSFC_diff_land.values.flatten()[~np.isnan(amplitude_SWSFC_diff_land.values.flatten())], amplitude_HFX_diff_land.values.flatten()[~np.isnan(amplitude_HFX_diff_land.values.flatten())], min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(amplitude_SWSFC_diff_ocean.values.flatten()[~np.isnan(amplitude_SWSFC_diff_ocean.values.flatten())], amplitude_HFX_diff_ocean.values.flatten()[~np.isnan(amplitude_HFX_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(amplitude_SWSFC_diff.values.flatten()[~np.isnan(amplitude_SWSFC_diff.values.flatten())], amplitude_HFX_diff.values.flatten()[~np.isnan(amplitude_HFX_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	s1 = ax1.scatter(amplitude_SWSFC_diff_land, amplitude_HFX_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(amplitude_SWSFC_diff_ocean, amplitude_HFX_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(amplitude_SWSFC_diff, amplitude_HFX_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+l2 = ax1.plot([-50,1000],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-50, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*1000],'r',linestyle='--')
+slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+ax1.text(25, 425, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Daily SW SFC and HFX Amplitude Relationship\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_xlabel('Anomalous SW SFC Amplitude [$W/m^{2}$]',fontsize=10)
+ax1.set_ylabel('Anomalous HFX Ampltude [$W/m^{2}$]',fontsize=10)
+ax1.set_xlim([0,800])
+ax1.set_ylim([-50,300])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+# ### RR Amplitude vs Initiation
+
+# In[65]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[0.9,0.05], hspace=0.3, wspace=0.05)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+probability_density = True
+
+y_levels = [-10, 30]
+y_dl = 1
+
+if probability_density:
+	c_levels = [10**-6,0.02]
+	c_dl = .002
+else:
+	c_levels = [0,5000]
+	c_dl = 500
+
+if domain=='Land':
+	# Land
+	x=phase_initiation_diff_adj_land.values.flatten()[~np.isnan(phase_initiation_diff_adj_land.values.flatten())]
+	y=amplitude_RR_diff_land.values.flatten()[~np.isnan(phase_initiation_diff_adj_land.values.flatten())]
+	da2 = linreg(x, y, min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(phase_initiation_diff_adj_ocean.values.flatten()[~np.isnan(phase_initiation_diff_adj_ocean.values.flatten())], amplitude_RR_diff_ocean.values.flatten()[~np.isnan(amplitude_RR_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(phase_initiation_diff_adj.values.flatten()[~np.isnan(phase_initiation_diff_adj.values.flatten())], amplitude_RR_diff.values.flatten()[~np.isnan(amplitude_RR_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	H, xedges, yedges = np.histogram2d(x=x, y=y, bins=[np.arange(-11.5,12.5,1), np.arange(y_levels[0],y_levels[1]+y_dl,y_dl)], density=probability_density)
+	X, Y = np.meshgrid(xedges, yedges)
+	cf = ax1.pcolormesh(X, Y, H.T, cmap='OrRd', norm='log', shading='auto', vmin=c_levels[0], vmax=c_levels[1])
+	# cf = ax1.pcolormesh(X, Y, H.T, cmap='OrRd', norm='log', vmin=c_levels[0], vmax=c_levels[1])
+	# s1 = ax1.scatter(phase_initiation_diff_adj_land, amplitude_RR_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(phase_initiation_diff_adj_ocean, amplitude_RR_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(phase_initiation_diff_adj, amplitude_RR_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+# l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+# slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+# yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+# r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+# ax1.text(-35,255, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal RR and Early Initiation Difference (NCRF - CNTL)\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_ylabel('Anomalous RR Amplitude [$mm/hr$]',fontsize=10)
+ax1.set_xlabel('Initiation Difference [$hr$]',fontsize=10)
+ax1.set_xticks(np.arange(-12,13,2))
+ax1.set_xlim([-11,11])
+ax1.set_ylim([y_levels[0],y_levels[1]])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+ax2 = fig.add_subplot(gs[1,0])
+# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(c_levels[0],c_levels[1]+c_dl, c_dl))
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.array([0,10**-6,10**-5,10**-4,10**-3,10**-2]))
+cbar.minorticks_off()
+if probability_density:
+	cbar.set_label('Fractional Frequnecy')
+else:
+	cbar.set_label('Frequnecy')
+
+
+# In[122]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[0.9,0.05], hspace=0.3, wspace=0.05)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+probability_density = False
+
+y_levels = [0, 30]
+y_dl = 1
+
+if probability_density:
+	c_levels = [10**-6,0.02]
+	c_dl = .002
+else:
+	c_levels = [0,5000]
+	c_dl = 500
+
+if domain=='Land':
+	# Land
+	x=xr.where(da_d02_LANDMASK==1,phase_initiation_cntl,np.nan).values.flatten()[~np.isnan(phase_initiation_cntl.values.flatten())]
+	y=amplitude_RR_cntl_land.values.flatten()[~np.isnan(phase_initiation_cntl.values.flatten())]
+	da2 = linreg(x, y, min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(phase_initiation_diff_adj_ocean.values.flatten()[~np.isnan(phase_initiation_diff_adj_ocean.values.flatten())], amplitude_RR_diff_ocean.values.flatten()[~np.isnan(amplitude_RR_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(phase_initiation_diff_adj.values.flatten()[~np.isnan(phase_initiation_diff_adj.values.flatten())], amplitude_RR_diff.values.flatten()[~np.isnan(amplitude_RR_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	H_cntl, xedges, yedges = np.histogram2d(x=x, y=y, bins=[np.arange(-0.5,24.5,1), np.arange(y_levels[0],y_levels[1]+y_dl,y_dl)], density=probability_density)
+	X, Y = np.meshgrid(xedges, yedges)
+	if probability_density:
+		cf = ax1.pcolormesh(X, Y, H_cntl.T, cmap='OrRd', norm='log', shading='auto', vmin=c_levels[0], vmax=c_levels[1])
+	else:
+		cf = ax1.pcolormesh(X, Y, H_cntl.T, cmap='OrRd', norm='linear', shading='auto', vmin=c_levels[0], vmax=c_levels[1])
+elif domain=='Ocean':
+	s1 = ax1.scatter(phase_initiation_diff_adj_ocean, amplitude_RR_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(phase_initiation_diff_adj, amplitude_RR_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+# l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+# slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+# yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+# r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+# ax1.text(-35,255, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal RR Amplitude and Initiation Time: CNTL\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_ylabel('RR Amplitude [$mm/hr$]',fontsize=10)
+ax1.set_xlabel('Initiation Time (UTC)',fontsize=10)
+ax1.set_xticks(np.arange(0,25,3))
+ax1.set_xlim([0,23])
+ax1.set_ylim([y_levels[0],y_levels[1]])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+ax2 = fig.add_subplot(gs[1,0])
+
+if probability_density:
+	cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.array([0,10**-6,10**-5,10**-4,10**-3,10**-2]))
+	cbar.set_label('Fractional Frequnecy')
+else:
+	cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(c_levels[0],c_levels[1]+c_dl, c_dl))
+	cbar.set_label('Frequnecy')
+# cbar.minorticks_off()
+
+
+# In[120]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[0.9,0.05], hspace=0.3, wspace=0.05)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+probability_density = False
+
+y_levels = [0, 30]
+y_dl = 1
+
+if probability_density:
+	c_levels = [10**-6,0.012]
+	c_dl = .002
+else:
+	c_levels = [0,5000]
+	c_dl = 500
+
+if domain=='Land':
+	# Land
+	x=xr.where(da_d02_LANDMASK==1,phase_initiation_sunrise,np.nan).values.flatten()[~np.isnan(phase_initiation_sunrise.values.flatten())]
+	y=amplitude_RR_sunrise_land.values.flatten()[~np.isnan(phase_initiation_sunrise.values.flatten())]
+	da2 = linreg(x, y, min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(phase_initiation_diff_adj_ocean.values.flatten()[~np.isnan(phase_initiation_diff_adj_ocean.values.flatten())], amplitude_RR_diff_ocean.values.flatten()[~np.isnan(amplitude_RR_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(phase_initiation_diff_adj.values.flatten()[~np.isnan(phase_initiation_diff_adj.values.flatten())], amplitude_RR_diff.values.flatten()[~np.isnan(amplitude_RR_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	H_sunrise, xedges, yedges = np.histogram2d(x=x, y=y, bins=[np.arange(-0.5,24.5,1), np.arange(y_levels[0],y_levels[1]+y_dl,y_dl)], density=probability_density)
+	X, Y = np.meshgrid(xedges, yedges)
+	if probability_density:
+		cf = ax1.pcolormesh(X, Y, H_sunrise.T, cmap='OrRd', norm='log', shading='auto', vmin=c_levels[0], vmax=c_levels[1])
+	else:
+		cf = ax1.pcolormesh(X, Y, H_sunrise.T, cmap='OrRd', norm='linear', shading='auto', vmin=c_levels[0], vmax=c_levels[1])
+	# cf = ax1.pcolormesh(X, Y, H.T, cmap='OrRd', norm='log', vmin=c_levels[0], vmax=c_levels[1])
+	# s1 = ax1.scatter(phase_initiation_diff_adj_land, amplitude_RR_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(phase_initiation_diff_adj_ocean, amplitude_RR_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(phase_initiation_diff_adj, amplitude_RR_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+# l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+# slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+# yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+# r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+# ax1.text(-35,255, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal RR Amplitude and Initiation Time: NCRF\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_ylabel('RR Amplitude [$mm/hr$]',fontsize=10)
+ax1.set_xlabel('Initiation Time (UTC)',fontsize=10)
+ax1.set_xticks(np.arange(0,25,3))
+ax1.set_xlim([0,23])
+ax1.set_ylim([y_levels[0],y_levels[1]])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+ax2 = fig.add_subplot(gs[1,0])
+# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(c_levels[0],c_levels[1]+c_dl, c_dl))
+# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.array([0,10**-6,10**-5,10**-4,10**-3,10**-2]))
+# cbar.minorticks_off()
+if probability_density:
+	cbar.set_label('Fractional Frequnecy')
+	cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.array([0,10**-6,10**-5,10**-4,10**-3,10**-2]))
+else:
+	cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='max', ticks=np.arange(c_levels[0],c_levels[1]+c_dl, c_dl))
+	cbar.set_label('Frequnecy')
+
+
+# In[121]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=2, ncols=1, height_ratios=[0.9,0.05], hspace=0.3, wspace=0.05)
+ax1 = fig.add_subplot(gs[0,0])
+
+fs = 18
+
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+probability_density = True
+
+y_levels = [0, 30]
+y_dl = 1
+
+if probability_density:
+	c_levels = [-0.01,0.01]
+	c_dl = .002
+else:
+	c_levels = [0,5000]
+	c_dl = 500
+
+if domain=='Land':
+	# Land
+	x=xr.where(da_d02_LANDMASK==1,phase_initiation_sunrise,np.nan).values.flatten()[~np.isnan(phase_initiation_sunrise.values.flatten())]
+	y=amplitude_RR_sunrise_land.values.flatten()[~np.isnan(phase_initiation_sunrise.values.flatten())]
+	da2 = linreg(x, y, min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(phase_initiation_diff_adj_ocean.values.flatten()[~np.isnan(phase_initiation_diff_adj_ocean.values.flatten())], amplitude_RR_diff_ocean.values.flatten()[~np.isnan(amplitude_RR_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(phase_initiation_diff_adj.values.flatten()[~np.isnan(phase_initiation_diff_adj.values.flatten())], amplitude_RR_diff.values.flatten()[~np.isnan(amplitude_RR_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	H, xedges, yedges = np.histogram2d(x=x, y=y, bins=[np.arange(-0.5,24.5,1), np.arange(y_levels[0],y_levels[1]+y_dl,y_dl)], density=probability_density)
+	X, Y = np.meshgrid(xedges, yedges)
+	cf = ax1.pcolormesh(X, Y, H_sunrise.T-H_cntl.T, cmap='RdBu_r', norm=mpl.colors.SymLogNorm(linthresh=0.001, linscale=1,
+                                              vmin=c_levels[0], vmax=c_levels[1], base=10), shading='auto')
+	# cf = ax1.pcolormesh(X, Y, H.T, cmap='OrRd', norm='log', vmin=c_levels[0], vmax=c_levels[1])
+	# s1 = ax1.scatter(phase_initiation_diff_adj_land, amplitude_RR_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(phase_initiation_diff_adj_ocean, amplitude_RR_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(phase_initiation_diff_adj, amplitude_RR_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+# l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+# slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+# yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+# r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+# ax1.text(-35,255, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal RR Amplitude and Initiation Time : NCRF-CNTL\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_ylabel('RR Amplitude [$mm/hr$]',fontsize=10)
+ax1.set_xlabel('Initiation Time (UTC)',fontsize=10)
+ax1.set_xticks(np.arange(0,25,3))
+ax1.set_xlim([0,23])
+ax1.set_ylim([y_levels[0],y_levels[1]])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+ax2 = fig.add_subplot(gs[1,0])
+if probability_density:
+	
+	cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.array([-10**-2,-10**-3,0,10**-3,10**-2]))
+	# cbar.set_ticklabels(np.array(c_levels[0]))
+	# cbar.set_ticklabels(np.arange(levels[0],levels[1]+dl,dl*5), fontsize=fs-4)
+	cbar.set_label('Fractional Frequnecy')
+else:
+	# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(c_levels[0],c_levels[1]+c_dl, c_dl))
+	# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.array([-10**-1,-10**-2,-10**-3,-10**-4,-10**-5,-10**-6,0,10**-6,10**-5,10**-4,10**-3,10**-2,10**-1]))
+	# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(-.01,.01+.002, .002))
+	cbar.set_label('Frequnecy')
+
+
+# In[117]:
+
+
+fig = plt.figure(figsize=(7,7))
+gs = gridspec.GridSpec(nrows=2, ncols=3, height_ratios=[0.9,0.05], hspace=0.3, wspace=0.05)
+ax1 = fig.add_subplot(gs[0,2])
+
+fs = 18
+
+# Diurnal Composites
+	# Rain Rate Amplitude (RR)
+	# Sensible Heat Flux (HFX)
+
+## Calculate linear regressions	##
+min_lag = 0
+max_lag = 0
+lag_plot = 0				# The lag relationship plotted on the first row
+domain = 'Land'
+probability_density = True
+
+y_levels = [0, 30]
+y_dl = 1
+
+if probability_density:
+	c_levels = [-0.01,0.01]
+	c_dl = .002
+else:
+	c_levels = [0,5000]
+	c_dl = 500
+
+if domain=='Land':
+	# Land
+	x=xr.where(da_d02_LANDMASK==1,phase_initiation_sunrise,np.nan).values.flatten()[~np.isnan(phase_initiation_sunrise.values.flatten())]
+	y=amplitude_RR_sunrise_land.values.flatten()[~np.isnan(phase_initiation_sunrise.values.flatten())]
+	da2 = linreg(x, y, min_lag, max_lag)
+elif domain=='Ocean':
+	# Ocean
+	da2 = linreg(phase_initiation_diff_adj_ocean.values.flatten()[~np.isnan(phase_initiation_diff_adj_ocean.values.flatten())], amplitude_RR_diff_ocean.values.flatten()[~np.isnan(amplitude_RR_diff_ocean.values.flatten())], min_lag, max_lag)
+elif domain=='Net':
+	# Net
+	da2 = linreg(phase_initiation_diff_adj.values.flatten()[~np.isnan(phase_initiation_diff_adj.values.flatten())], amplitude_RR_diff.values.flatten()[~np.isnan(amplitude_RR_diff.values.flatten())], min_lag, max_lag)
+
+## Plot linear regressions	##
+if domain=='Land':
+	H, xedges, yedges = np.histogram2d(x=x, y=y, bins=[np.arange(-0.5,24.5,1), np.arange(y_levels[0],y_levels[1]+y_dl,y_dl)], density=probability_density)
+	X, Y = np.meshgrid(xedges, yedges)
+	cf = ax1.pcolormesh(X, Y, H_sunrise.T-H_cntl.T, cmap='RdBu_r', norm=mpl.colors.SymLogNorm(linthresh=0.001, linscale=1,
+                                              vmin=c_levels[0], vmax=c_levels[1], base=10), shading='auto')
+	# cf = ax1.pcolormesh(X, Y, H.T, cmap='OrRd', norm='log', vmin=c_levels[0], vmax=c_levels[1])
+	# s1 = ax1.scatter(phase_initiation_diff_adj_land, amplitude_RR_diff_land,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Ocean':
+	s1 = ax1.scatter(phase_initiation_diff_adj_ocean, amplitude_RR_diff_ocean,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+elif domain=='Net':
+	s1 = ax1.scatter(phase_initiation_diff_adj, amplitude_RR_diff,s=15,edgecolors='0.5', alpha=0.5, linewidths=.15)
+
+# l2 = ax1.plot([-200,200],[da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*-200, da2.where(da2==lag_plot,drop=True).yintercept.values+da2.where(da2==lag_plot,drop=True).slope.values*200],'r',linestyle='--')
+# slope = da2.where(da2==lag_plot,drop=True).slope.values[0]
+# yintercept = da2.where(da2==lag_plot,drop=True).yintercept.values[0]
+# r2 = da2.where(da2==lag_plot,drop=True).rvalue.values[0]**2
+# ax1.text(-35,255, f'$y = {slope:.2f}x + ({yintercept:.2f})$\n$R^{2}={r2:.2f}$', color='k', weight='bold')
+
+ax1.axhline(y=0, color='k', linestyle='-', linewidth=1)
+# ax1.axvline(x=0, color='k', linestyle='-', linewidth=1)
+title = f'Diurnal RR Amplitude and Initiation Time : NCRF-CNTL\nover the MC {domain}'
+ax1.set_title(title, fontsize=fs)
+ax1.set_ylabel('RR Amplitude [$mm/hr$]',fontsize=10)
+ax1.set_xlabel('Initiation Time (UTC)',fontsize=10)
+ax1.set_xticks(np.arange(0,25,3))
+ax1.set_xlim([0,23])
+ax1.set_ylim([y_levels[0],y_levels[1]])
+ax1.grid(linestyle='--', axis='both', linewidth=1)
+
+
+ax2 = fig.add_subplot(gs[1,2])
+if probability_density:
+	
+	cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.array([-10**-2,-10**-3,0,10**-3,10**-2]))
+	# cbar.set_ticklabels(np.array(c_levels[0]))
+	# cbar.set_ticklabels(np.arange(levels[0],levels[1]+dl,dl*5), fontsize=fs-4)
+	cbar.set_label('Fractional Frequnecy')
+else:
+	# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(c_levels[0],c_levels[1]+c_dl, c_dl))
+	# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.array([-10**-1,-10**-2,-10**-3,-10**-4,-10**-5,-10**-6,0,10**-6,10**-5,10**-4,10**-3,10**-2,10**-1]))
+	# cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(-.01,.01+.002, .002))
+	cbar.set_label('Frequnecy')
+
+
+# ### Distance from Coast
+
+# In[ ]:
+
+
+from scipy.ndimage import label, sum as ndi_sum
+
+
+# In[169]:
+
+
+# d02
+da_d02_LU_INDEX = ds_d02['LU_INDEX'].sel(Time=slice(1)).compute().squeeze()   # Land = 1, Water = 0
+da_d02_LU_INDEX = da_d02_LU_INDEX.assign_coords(south_north=('south_north',da_d02_LU_INDEX.XLAT[:,0].values),
+	west_east=('west_east',da_d02_LU_INDEX.XLONG[0,:].values))
+# d02
+da_d02_LAKEMASK = ds_d02['LAKEMASK'].sel(Time=slice(1)).compute().squeeze()   # Lake = 1, Non-Lake = 0
+da_d02_LAKEMASK = da_d02_LAKEMASK.assign_coords(south_north=('south_north',da_d02_LAKEMASK.XLAT[:,0].values),
+	west_east=('west_east',da_d02_LAKEMASK.XLONG[0,:].values))
+# d02
+da_d02_LANDMASK = ds_d02['LANDMASK'].sel(Time=slice(1)).compute().squeeze()   # Land = 1, Water = 0
+da_d02_LANDMASK = xr.where((da_d02_LU_INDEX==17), 0, 1)		# Index 17 is specifically ocean
+da_d02_LANDMASK = xr.where((da_d02_LAKEMASK==1), 1, da_d02_LANDMASK)	# If it's a lake, change change landmask to land since it's surrounded by land and no ocean.
+da_d02_LANDMASK = da_d02_LANDMASK.assign_coords(south_north=('south_north',da_d02_LANDMASK.XLAT[:,0].values),
+	west_east=('west_east',da_d02_LANDMASK.XLONG[0,:].values))
+
+
+# In[170]:
+
+
+## Removes small islands
+from scipy.ndimage import label, sum as ndi_sum
+
+def remove_small_clusters(matrix, min_cluster_size):
+    # Label the connected components (clusters) in the matrix
+    labeled_matrix, num_features = label(matrix)
+
+    # Calculate the size of each cluster
+    cluster_sizes = ndi_sum(matrix, labeled_matrix, index=np.arange(1, num_features + 1))
+
+    # Remove clusters smaller than the min_cluster_size
+    for cluster_num, size in enumerate(cluster_sizes, start=1):
+        if size < min_cluster_size:
+            matrix[labeled_matrix == cluster_num] = 0
+
+    return matrix, cluster_sizes
+
+min_cluster_size = 100  # 600 removes nearly all small islands but results don't indicate a huge change in off-shore features
+da_d02_LANDMASK.data, cluster_sizes = remove_small_clusters(da_d02_LANDMASK.values, min_cluster_size)
+
+
+distance_from_coast = da_d02_LANDMASK.copy(deep=True)
+# scipy.ndimage.distance_transform_edt only works on values of 1 (land)
+	# Where it is 1 (land), do the transform as usual, where it is 0 (ocean), change 0's to 1's and 1's to 0's, and then do the transform
+	# Multiply by the horizontal resolution to get accurate distance from coast values
+distance_from_coast.data = -xr.where(distance_from_coast==1, scipy.ndimage.distance_transform_edt(da_d02_LANDMASK)*3, scipy.ndimage.distance_transform_edt(xr.where(da_d02_LANDMASK==0, 1, 0))*-3)# multipy by 3 km to match distance from coast
+
+# distance_from_coast.data = -xr.where(distance_from_coast==1, scipy.ndimage.distance_transform_bf(da_d02_LANDMASK, metric='taxicab', return_indices=False)*3, scipy.ndimage.distance_transform_bf(xr.where(da_d02_LANDMASK==0, 1, 0), metric='taxicab', return_indices=False)*-3)# multipy by 3 km to match distance from coast
+
+distance_from_coast.name = 'DistFromCoast'
+distance_from_coast = distance_from_coast.assign_attrs(Units='km', description='Negative for land, Postive for ocean')
+distance_from_coast = distance_from_coast.assign_coords(south_north=('south_north',distance_from_coast.XLAT[:,0].values),
+	west_east=('west_east',distance_from_coast.XLONG[0,:].values))
+
+# smoothing_num=40
+# distance_from_coast = distance_from_coast.rolling(south_north=smoothing_num, west_east=smoothing_num, min_periods=1, center=True).mean()
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+fs=18
+
+lon_bound = [90,125]
+lat_bound = [-10,10]
+
+levels = [-250, 250]
+dl = 10
+
+cf = distance_from_coast.plot.contourf(
+  ax=ax1,
+  add_colorbar=False,
+  cmap='RdBu',
+  levels=np.arange(levels[0],levels[1]+dl,dl),
+  x='west_east',
+  y='south_north',
+  vmin=levels[0], vmax=levels[1],
+  xlim=[lon_bound[0], lon_bound[1]],
+  ylim=[lat_bound[0], lat_bound[1]],
+  extend='both'
+  # extend='neither'
+  )
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels, fontsize=fs-4)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels, fontsize=fs-4)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title(f'Distance from Coast with <{min_cluster_size*(3**2)}km^2 islands removed', loc='center', fontsize=fs)
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(levels[0],levels[1]+dl,dl*5))
+cbar.set_ticklabels(np.arange(levels[0],levels[1]+dl,dl*5), fontsize=fs-4)
+cbar.minorticks_off()
+cbar.set_label('Kilometers', fontsize=fs-4)
+
+
+# In[ ]:
+
+
+l = plt.hist(distance_from_coast.values.flatten(), bins=np.arange(-300-(100/2),1100+(100/2),100), density=True)
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+lon_bound = [90,125]
+lat_bound = [-10,10]
+
+# levels = [-250, 250]
+levels = [0, 17]
+dl = 1
+
+cf = da_d02_LU_INDEX.plot.contourf(
+  ax=ax1,
+  add_colorbar=False,
+  cmap='jet',
+  levels=np.arange(levels[0],levels[1]+dl,dl),
+  x='west_east',
+  y='south_north',
+  vmin=-250, vmax=250,
+  xlim=[lon_bound[0], lon_bound[1]],
+  ylim=[lat_bound[0], lat_bound[1]],
+  extend='both'
+  # extend='neither'
+  )
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title(f'Land Use Index', loc='center')
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(levels[0],levels[1]+dl, dl))
+cbar.minorticks_off()
+cbar.set_label('Km')
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(16,8))
+gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, wspace=0, height_ratios=[.95,.05],width_ratios=[.15,.7,.15])
+ax1 = fig.add_subplot(gs[0,:], projection=ccrs.PlateCarree(central_longitude=0))
+
+lon_bound = [90,125]
+lat_bound = [-10,10]
+
+# levels = [-250, 250]
+levels = [0, 1]
+dl = .5
+
+cf = da_d02_LAKEMASK.plot.contourf(
+  ax=ax1,
+  add_colorbar=False,
+  cmap='RdBu',
+  levels=np.arange(levels[0],levels[1]+dl,dl),
+  x='west_east',
+  y='south_north',
+  vmin=0, vmax=1,
+  xlim=[lon_bound[0], lon_bound[1]],
+  ylim=[lat_bound[0], lat_bound[1]],
+  # extend='both'
+  extend='neither'
+  )
+
+# Western Central Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords1.shape[2])):
+	plt.plot(all_line_coords1[1,:,i],all_line_coords1[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords1[1][:,int(all_line_coords1.shape[2]/2)],all_line_coords1[0][:,int(all_line_coords1.shape[2]/2)],s=3)
+# # Plot the off-shore radar (R/V Mirai of JAMSTEC)
+# RV = plt.scatter(101.90,-4.07,s=100,marker='*',c='g', label='R/V Mirai')
+# # Plot the on-shore observatory in Bengkulu city (BMKG observatory)
+# BMKG = plt.scatter(102.34,-3.86,s=100,marker='o',c='g', label='BMKG Observatory')
+
+# North Western Sumatra
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords2.shape[2])):
+	plt.plot(all_line_coords2[1,:,i],all_line_coords2[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords2[1][:,int(all_line_coords2.shape[2]/2)],all_line_coords2[0][:,int(all_line_coords2.shape[2]/2)],s=3)
+
+# North Western Borneo
+# Plot the individual cross-sectioned lines
+for i in range(int(all_line_coords3.shape[2])):
+	plt.plot(all_line_coords3[1,:,i],all_line_coords3[0,:,i],'k',linewidth=0.25)
+# Plot the center line
+plt.plot(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],'k',linewidth=1)
+# Plot the grid resolution
+plt.scatter(all_line_coords3[1][:,int(all_line_coords3.shape[2]/2)],all_line_coords3[0][:,int(all_line_coords3.shape[2]/2)],s=3)
+
+# Set parameters and labels
+x_ticks = [90,100,110,120]
+x_tick_labels = [u'90\N{DEGREE SIGN}E',
+                 u'100\N{DEGREE SIGN}E', u'110\N{DEGREE SIGN}E',
+                 u'120\N{DEGREE SIGN}E']
+y_ticks = [-10,-5,0,5,10]
+y_tick_labels = [u'10\N{DEGREE SIGN}S',u'5\N{DEGREE SIGN}S',
+		 		u'0\N{DEGREE SIGN}',
+				u'5\N{DEGREE SIGN}N',u'10\N{DEGREE SIGN}N']
+
+# Plot the coast lines
+ax1.coastlines(linewidth=1, color='k', resolution='50m')  # cartopy function
+ax1.set_xticks(x_ticks)
+ax1.set_xticklabels(x_tick_labels)
+ax1.set_yticks(y_ticks)
+ax1.set_yticklabels(y_tick_labels)
+ax1.set_xlabel('')
+ax1.set_ylabel('')
+
+ax1.set_title(f'Lake or Non-Lake', loc='center')
+
+ax2 = fig.add_subplot(gs[1,1])
+cbar = plt.colorbar(cf, cax=ax2, orientation='horizontal', extend='both', ticks=np.arange(levels[0],levels[1]+dl, dl))
+cbar.minorticks_off()
+cbar.set_label('Index')
+
+
+# ### Hovmoller Rain Rate
+
+# #### Diurnal Composite
+
+# In[172]:
+
+
+## Load Data
+
+# Control
+
+RR_cntl = da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+	# Assign Local Time
+RR_cntl = assign_LT_coord(RR_cntl)
+	# Assign distance from coast coordinate
+RR_cntl = RR_cntl.assign_coords(distance_from_coast=(('south_north','west_east'), distance_from_coast.values))
+	# Group by local time and by distance from coast via flox
+	# Average by distance from coast
+RR_cntl = xarray_reduce(RR_cntl,
+			'LocalTime.hour',
+			'distance_from_coast',
+			func='mean',
+			expected_groups=(np.arange(0,24), np.arange(np.floor(RR_cntl.distance_from_coast.min().values), np.ceil(RR_cntl.distance_from_coast.max().values)+3,3)),
+			isbin=[False, True]
+			)
+RR_cntl = RR_cntl.assign_coords(distance_from_coast_bins=pd.arrays.IntervalArray(RR_cntl.distance_from_coast_bins.values).left.values)
+RR_cntl = RR_cntl.rename(distance_from_coast_bins='distance_from_coast')
+# Concat to make a more continuous plot
+RR_cntl = xr.concat([RR_cntl,RR_cntl], dim='hour', data_vars='all')
+RR_cntl = RR_cntl.assign_coords(hour=(['hour'], np.arange(-0.5,47.5)))
+
+
+# Sunrise CRF off @ 00UTC	[Morning]
+RR_sunrise = da_d02_sunrise_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+inds = np.argwhere(RR_sunrise.mean(['south_north','west_east']).to_numpy()<0)	# Find the inds where RR is negative b/c of stitching many simulations together
+RR_sunrise[inds[:,0],...] = (RR_sunrise[inds[:,0]-1,...].to_numpy()+RR_sunrise[inds[:,0]+1,...].to_numpy())/2
+	# Assign Local Time
+RR_sunrise = assign_LT_coord(RR_sunrise)
+	# Assign distance from coast coordinate
+RR_sunrise = RR_sunrise.assign_coords(distance_from_coast=(('south_north','west_east'), distance_from_coast.values))
+	# Group by local time and by distance from coast via flox
+	# Average by distance from coast
+RR_sunrise = xarray_reduce(RR_sunrise,
+			'LocalTime.hour',
+			'distance_from_coast',
+			func='mean',
+			expected_groups=(np.arange(0,24), np.arange(np.floor(RR_sunrise.distance_from_coast.min().values), np.ceil(RR_sunrise.distance_from_coast.max().values)+3,3)),
+			isbin=[False, True]
+			)
+RR_sunrise = RR_sunrise.assign_coords(distance_from_coast_bins=pd.arrays.IntervalArray(RR_sunrise.distance_from_coast_bins.values).left.values)
+RR_sunrise = RR_sunrise.rename(distance_from_coast_bins='distance_from_coast')
+# Concat to make a more continuous plot
+RR_sunrise = xr.concat([RR_sunrise,RR_sunrise], dim='hour', data_vars='all')
+RR_sunrise = RR_sunrise.assign_coords(hour=(['hour'], np.arange(-0.5,47.5)))
+
+
+## Smooth the data
+smoothing_num=3
+RR_cntl = RR_cntl.rolling(distance_from_coast=smoothing_num, min_periods=1, center=True).mean()
+RR_sunrise = RR_sunrise.rolling(distance_from_coast=smoothing_num, min_periods=1, center=True).mean()
+
+
+# In[173]:
+
+
+fig = plt.figure(figsize=(13,8))
+gs = gridspec.GridSpec(nrows=2, ncols=2, hspace=0.25, height_ratios=[0.825,0.03], wspace=0.15, width_ratios=[.5,.5])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+# Fontsize
+fs = 20
+
+title = 'Rain Rate Diurnal Composite over MC'
+fig.suptitle(title, fontsize=fs+2)
+
+dl=.1
+# Plot the cross-sectional data
+cf1 = RR_cntl.plot.contourf(
+	ax=ax1,
+	x = 'distance_from_coast',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	cmap='gray_r',
+	center=0,
+	extend='max'
+)
+
+# Plot the cross-sectional data
+cf2 = RR_sunrise.plot.contourf(
+	ax=ax2,
+	x = 'distance_from_coast',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	cmap='gray_r',
+	center=0,
+	extend='max'
+)
+
+## Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+ax2.axhline(y=0, color='r', linestyle='--', linewidth=3)
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs-2)
+ax2.set_ylabel('Lead Time', fontsize=fs-2)
+ax1.set_xticks(np.arange(-300,700,100))
+ax2.set_xticks(np.arange(-300,700,100))
+ax1.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax1.set_yticks(RR_cntl.hour[0::3].values+0.5)
+ax2.set_yticks(RR_cntl.hour[0::3].values+0.5)
+# ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
+ax1.set_yticklabels(np.concatenate((np.arange(0,23,3), np.arange(0,23,3))),fontsize=fs-6)
+ax2.set_yticklabels(np.arange(0,48,3),fontsize=fs-6)
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+
+# ax1.set_xlim([RR_cntl.distance_from_coast[0],RR_cntl.distance_from_coast[-1]])
+# ax2.set_xlim([RR_sunrise.distance_from_coast[0],RR_sunrise.distance_from_coast[-1]])
+ax1.set_xlim([RR_cntl.distance_from_coast[0], 600])
+ax2.set_xlim([RR_sunrise.distance_from_coast[0], 600])
+ax1.set_ylim([0,46.5])
+ax2.set_ylim([0,46.5])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+
+
+## Plot the colorbar
+	# Rain rate colorbar
+cax1 = fig.add_subplot(gs[1, :])
+cbar = plt.colorbar(cf1, cax=cax1, orientation='horizontal', pad=0 , aspect=100)
+cbar.set_ticks(np.arange(0,5,1))
+cbar.set_ticklabels(np.arange(0,5,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm hr^{-1}$]', fontsize=fs-6)
+
+
+# In[174]:
+
+
+fig = plt.figure(figsize=(13,8))
+gs = gridspec.GridSpec(nrows=2, ncols=2, hspace=0.25, height_ratios=[0.825,0.05], wspace=0.15, width_ratios=[.5,.5])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+# Fontsize
+fs = 20
+
+title = 'Normalized Diurnal Rain Rate Difference from Control over the MC'
+fig.suptitle(title, fontsize=fs+2)
+
+dl=.125
+# Plot the cross-sectional data
+cf1 = RR_cntl.plot.contourf(
+	ax=ax1,
+	x = 'distance_from_coast',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	cmap='gray_r',
+	center=0,
+	extend='max'
+)
+
+# Plot the cross-sectional data
+RR_sunrise_diff = (RR_sunrise-RR_cntl)/RR_cntl.std('hour')
+cf2 = RR_sunrise_diff.plot.contourf(
+	ax=ax2,
+	x = 'distance_from_coast',
+    y = 'hour',
+	add_colorbar=False,
+	levels=np.arange(-3,3+dl*2,dl*2),
+	cmap='RdBu_r',
+	center=0,
+	extend='both'
+)
+
+## Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+ax2.axhline(y=0, color='r', linestyle='--', linewidth=3)
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs-2)
+ax2.set_ylabel('Lead Time', fontsize=fs-2)
+ax1.set_xticks(np.arange(-300,700,100))
+ax2.set_xticks(np.arange(-300,700,100))
+ax1.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax1.set_yticks(RR_cntl.hour[0::3].values+0.5)
+ax2.set_yticks(RR_cntl.hour[0::3].values+0.5)
+# ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
+ax1.set_yticklabels(np.concatenate((np.arange(0,23,3), np.arange(0,23,3))),fontsize=fs-6)
+ax2.set_yticklabels(np.arange(0,48,3),fontsize=fs-6)
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+
+# ax1.set_xlim([RR_cntl.distance_from_coast[0],RR_cntl.distance_from_coast[-1]])
+# ax2.set_xlim([RR_sunrise.distance_from_coast[0],RR_sunrise.distance_from_coast[-1]])
+ax1.set_xlim([RR_cntl.distance_from_coast[0], 600])
+ax2.set_xlim([RR_sunrise.distance_from_coast[0], 600])
+ax1.set_ylim([0,46.5])
+ax2.set_ylim([0,46.5])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+
+
+## Plot the colorbar
+	# Rain rate colorbar
+cax1 = fig.add_subplot(gs[1, 0])
+cbar = plt.colorbar(cf1, cax=cax1, orientation='horizontal', pad=0 , aspect=100)
+cbar.set_ticks(np.arange(0,5,1))
+cbar.set_ticklabels(np.arange(0,5,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm hr^{-1}$]', fontsize=fs-6)
+	# Rain rate colorbar
+cax2 = fig.add_subplot(gs[1, 1])
+cbar = plt.colorbar(cf2, cax=cax2, orientation='horizontal', pad=0 , aspect=100)
+cbar.set_ticks(np.arange(-3,3+1,1))
+cbar.set_ticklabels(np.arange(-3,3+1,1), fontsize=fs-6)
+cbar.set_label('[$(RR-RR_{cntl})/\sigma_{cntl}$]', fontsize=fs-6)
+
+
+# #### Time Series
+
+# In[175]:
+
+
+## Load Data
+
+# Control
+
+RR_cntl = da_d02_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+	# Assign Local Time
+RR_cntl = assign_LT_coord(RR_cntl)
+	# Assign distance from coast coordinate
+RR_cntl = RR_cntl.assign_coords(distance_from_coast=(('south_north','west_east'), distance_from_coast.values))
+	# Group by local time and by distance from coast via flox
+	# Average by distance from coast
+RR_cntl = xarray_reduce(RR_cntl,
+			'LocalTime',
+			'distance_from_coast',
+			func='mean',
+			expected_groups=(np.unique(RR_cntl.LocalTime.values), np.arange(np.floor(RR_cntl.distance_from_coast.min().values), np.ceil(RR_cntl.distance_from_coast.max().values)+3,3)),
+			isbin=[False, True]
+			)
+RR_cntl = RR_cntl.assign_coords(distance_from_coast_bins=pd.arrays.IntervalArray(RR_cntl.distance_from_coast_bins.values).left.values)
+RR_cntl = RR_cntl.rename(distance_from_coast_bins='distance_from_coast')
+
+# Sunrise CRF off @ 00UTC	[Morning]
+RR_sunrise = da_d02_sunrise_RR.sel(Time=slice('2015-11-23T02','2015-12-02T00')).copy()
+inds = np.argwhere(RR_sunrise.mean(['south_north','west_east']).to_numpy()<0)	# Find the inds where RR is negative b/c of stitching many simulations together
+RR_sunrise[inds[:,0],...] = (RR_sunrise[inds[:,0]-1,...].to_numpy()+RR_sunrise[inds[:,0]+1,...].to_numpy())/2
+	# Assign Local Time
+RR_sunrise = assign_LT_coord(RR_sunrise)
+	# Assign distance from coast coordinate
+RR_sunrise = RR_sunrise.assign_coords(distance_from_coast=(('south_north','west_east'), distance_from_coast.values))
+	# Group by local time and by distance from coast via flox
+	# Average by distance from coast
+RR_sunrise = xarray_reduce(RR_sunrise,
+			'LocalTime',
+			'distance_from_coast',
+			func='mean',
+			expected_groups=(np.unique(RR_sunrise.LocalTime.values), np.arange(np.floor(RR_sunrise.distance_from_coast.min().values), np.ceil(RR_sunrise.distance_from_coast.max().values)+3, 3)),
+			isbin=[False, True]
+			)
+RR_sunrise = RR_sunrise.assign_coords(distance_from_coast_bins=pd.arrays.IntervalArray(RR_sunrise.distance_from_coast_bins.values).left.values)
+RR_sunrise = RR_sunrise.rename(distance_from_coast_bins='distance_from_coast')
+
+
+## Smooth the data
+smoothing_num=1
+
+RR_cntl = RR_cntl.rolling(distance_from_coast=smoothing_num, min_periods=1, center=True).mean()
+RR_sunrise = RR_sunrise.rolling(distance_from_coast=smoothing_num, min_periods=1, center=True).mean()
+
+
+# In[179]:
+
+
+fig = plt.figure(figsize=(14,10))
+gs = gridspec.GridSpec(nrows=2, ncols=2, hspace=0.2, height_ratios=[0.825,0.03], wspace=0.05, width_ratios=[.5,.5])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+fs = 20
+
+title = 'Rain Rate Time Series over the MC'
+fig.suptitle(title, fontsize=fs+2)
+
+
+dl = .1
+# Control
+cf1 = RR_cntl.plot.contourf(
+	ax=ax1,
+	x = 'distance_from_coast',
+    y = 'LocalTime',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	# levels=np.append(0,np.logspace(0,0.9,20)),
+	cmap='gray_r',
+	center=0,
+)
+
+# Sunrise NCRF 00 UTC icloud=0
+cf2 = RR_sunrise.plot.contourf(
+	ax=ax2,
+	x = 'distance_from_coast',
+    y = 'LocalTime',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	# levels=np.append(0,np.logspace(0,0.9,20)),
+	cmap='gray_r',
+	center=0,
+)
+
+# Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+
+# for i in range(len(RR_cntl.Time[::24].values)-1):
+# 	ax2.axhline(y=RR_cntl.Time[::24].values[i], color='r', linestyle='--',)
+# 	ax3.axhline(y=RR_cntl.Time[12::24].values[i], color='r', linestyle='--')
+
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs-2)
+ax2.set_ylabel('', fontsize=fs)
+ax1.set_xticks(np.arange(-300,700,100))
+ax2.set_xticks(np.arange(-300,700,100))
+ax1.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax1.set_yticks(RR_cntl.LocalTime[::24].values)
+ax2.set_yticks(RR_cntl.LocalTime[::24].values)
+ax1.set_yticklabels(RR_cntl.LocalTime[::24].dt.strftime("%m/%d %H").values, fontsize=fs-10)
+ax2.set_yticklabels('')
+# ax1.set_xlim([RR_cntl.distance_from_coast[0],RR_cntl.distance_from_coast[-1]])
+# ax2.set_xlim([RR_sunrise.distance_from_coast[0],RR_sunrise.distance_from_coast[-1]])
+ax1.set_xlim([RR_cntl.distance_from_coast[0], 600])
+ax2.set_xlim([RR_sunrise.distance_from_coast[0], 600])
+ax2.set_ylim([RR_cntl.LocalTime[0].values,RR_cntl.LocalTime[-1].values])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+# Create grids
+ax1.grid(linestyle='--', axis='y', linewidth=1.5)
+ax2.grid(linestyle='--', axis='y', linewidth=1.5)
+
+
+# Plot the colorbar
+	# Rain rate colorbar
+ax2 = fig.add_subplot(gs[1, :])
+cbar = plt.colorbar(cf1, cax=ax2, orientation='horizontal', pad=0 , aspect=100, extend='max')
+cbar.set_ticks(np.arange(0,5,1))
+cbar.set_ticklabels(np.arange(0,5,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm hr^{-1}$]', fontsize=fs-6)
+
+
+# In[180]:
+
+
+fig = plt.figure(figsize=(14,10))
+gs = gridspec.GridSpec(nrows=2, ncols=2, hspace=0.2, height_ratios=[0.825,0.03], wspace=0.05, width_ratios=[.5,.5])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+fs = 20
+
+title = 'Rain Rate Difference From Control Time Series over the MC'
+fig.suptitle(title, fontsize=fs+2)
+
+
+dl = .1
+# Control
+cf1 = RR_cntl.plot.contourf(
+	ax=ax1,
+	x = 'distance_from_coast',
+    y = 'LocalTime',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	cmap='gray_r',
+	center=0,
+)
+
+RR_sunrise_diff = RR_sunrise-RR_cntl
+# Sunrise NCRF 00 UTC icloud=0
+cf2 = RR_sunrise_diff.plot.contourf(
+	ax=ax2,
+	x = 'distance_from_coast',
+    y = 'LocalTime',
+	add_colorbar=False,
+	levels=np.arange(-3,3+dl*2,dl*2),
+	cmap='RdBu_r',
+	center=0,
+)
+
+# Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+
+# for i in range(len(RR_cntl.Time[::24].values)-1):
+# 	ax2.axhline(y=RR_cntl.Time[::24].values[i], color='r', linestyle='--',)
+# 	ax3.axhline(y=RR_cntl.Time[12::24].values[i], color='r', linestyle='--')
+
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs-2)
+ax2.set_ylabel('', fontsize=fs)
+ax1.set_xticks(np.arange(-300,700,100))
+ax2.set_xticks(np.arange(-300,700,100))
+ax1.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax1.set_yticks(RR_cntl.LocalTime[::24].values)
+ax2.set_yticks(RR_cntl.LocalTime[::24].values)
+ax1.set_yticklabels(RR_cntl.LocalTime[::24].dt.strftime("%m/%d %H").values, fontsize=fs-10)
+ax2.set_yticklabels('')
+# ax1.set_xlim([RR_cntl.distance_from_coast[0],RR_cntl.distance_from_coast[-1]])
+# ax2.set_xlim([RR_sunrise.distance_from_coast[0],RR_sunrise.distance_from_coast[-1]])
+ax1.set_xlim([RR_cntl.distance_from_coast[0], 600])
+ax2.set_xlim([RR_sunrise.distance_from_coast[0], 600])
+ax2.set_ylim([RR_cntl.LocalTime[0].values,RR_cntl.LocalTime[-1].values])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+# Create grids
+ax1.grid(linestyle='--', axis='y', linewidth=1.5)
+ax2.grid(linestyle='--', axis='y', linewidth=1.5)
+
+
+# Plot the colorbar
+	# Rain rate colorbar
+ax3 = fig.add_subplot(gs[1, 0])
+cbar = plt.colorbar(cf1, cax=ax3, orientation='horizontal', pad=0 , aspect=100, extend='max')
+cbar.set_ticks(np.arange(0,4+1,1))
+cbar.set_ticklabels(np.arange(0,4+1,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm hr^{-1}$]', fontsize=fs-6)
+
+	# Rain rate colorbar
+ax4 = fig.add_subplot(gs[1, 1])
+cbar2 = plt.colorbar(cf2, cax=ax4, orientation='horizontal', pad=0 , aspect=100, extend='both')
+cbar2.set_ticks(np.arange(-3,3+1,1))
+cbar2.set_ticklabels(np.arange(-3,3+1,1), fontsize=fs-6)
+cbar2.set_label('Rain Rate Difference [$mm hr^{-1}$]', fontsize=fs-6)
+
+
+# In[182]:
+
+
+fig = plt.figure(figsize=(14,10))
+gs = gridspec.GridSpec(nrows=2, ncols=2, hspace=0.2, height_ratios=[0.825,0.03], wspace=0.05, width_ratios=[.5,.5])
+ax1 = fig.add_subplot(gs[0,0])
+ax2 = fig.add_subplot(gs[0,1])
+fs = 20
+
+title = 'Normalized Diurnal Rain Rate Difference from Control\nTime Series over the MC'
+fig.suptitle(title, fontsize=fs+2)
+
+
+dl = .1
+# Control
+cf1 = RR_cntl.plot.contourf(
+	ax=ax1,
+	x = 'distance_from_coast',
+    y = 'LocalTime',
+	add_colorbar=False,
+	levels=np.arange(0,4+dl,dl),
+	cmap='gray_r',
+	center=0,
+)
+
+RR_sunrise_diff = (RR_sunrise-RR_cntl)/RR_cntl.std('LocalTime')
+# Sunrise NCRF 00 UTC icloud=0
+cf2 = RR_sunrise_diff.plot.contourf(
+	ax=ax2,
+	x = 'distance_from_coast',
+    y = 'LocalTime',
+	add_colorbar=False,
+	levels=np.arange(-3,3+dl*2,dl*2),
+	cmap='RdBu_r',
+	center=0,
+)
+
+# Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+
+# for i in range(len(RR_cntl.Time[::24].values)-1):
+# 	ax2.axhline(y=RR_cntl.Time[::24].values[i], color='r', linestyle='--',)
+# 	ax3.axhline(y=RR_cntl.Time[12::24].values[i], color='r', linestyle='--')
+
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs-2)
+ax2.set_ylabel('', fontsize=fs)
+ax1.set_xticks(np.arange(-300,700,100))
+ax2.set_xticks(np.arange(-300,700,100))
+ax1.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-300,700,100),fontsize=fs-6)
+ax1.set_yticks(RR_cntl.LocalTime[::24].values)
+ax2.set_yticks(RR_cntl.LocalTime[::24].values)
+ax1.set_yticklabels(RR_cntl.LocalTime[::24].dt.strftime("%m/%d %H").values, fontsize=fs-10)
+ax2.set_yticklabels('')
+# ax1.set_xlim([RR_cntl.distance_from_coast[0],RR_cntl.distance_from_coast[-1]])
+# ax2.set_xlim([RR_sunrise.distance_from_coast[0],RR_sunrise.distance_from_coast[-1]])
+ax1.set_xlim([RR_cntl.distance_from_coast[0], 600])
+ax2.set_xlim([RR_sunrise.distance_from_coast[0], 600])
+ax2.set_ylim([RR_cntl.LocalTime[0].values,RR_cntl.LocalTime[-1].values])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+# Create grids
+ax1.grid(linestyle='--', axis='y', linewidth=1.5)
+ax2.grid(linestyle='--', axis='y', linewidth=1.5)
+
+
+# Plot the colorbar
+	# Rain rate colorbar
+ax3 = fig.add_subplot(gs[1, 0])
+cbar = plt.colorbar(cf1, cax=ax3, orientation='horizontal', pad=0 , aspect=100, extend='max')
+cbar.set_ticks(np.arange(0,4+1,1))
+cbar.set_ticklabels(np.arange(0,4+1,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm hr^{-1}$]', fontsize=fs-6)
+
+	# Rain rate colorbar
+ax4 = fig.add_subplot(gs[1, 1])
+cbar2 = plt.colorbar(cf2, cax=ax4, orientation='horizontal', pad=0 , aspect=100, extend='both')
+cbar2.set_ticks(np.arange(-3,3+1,1))
+cbar2.set_ticklabels(np.arange(-3,3+1,1), fontsize=fs-6)
+cbar2.set_label('[$(RR-RR_{cntl})/\sigma_{cntl}$]', fontsize=fs-6)
 
 
 # ## Cross-sectional Analysis
 
 # ### Plot Domain
 
-# In[68]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(9.75,6.75))
@@ -3235,7 +8309,7 @@ ax1.legend(fontsize='x-large', markerscale=1.75)
 
 # #### Hovmoller Rain Rate
 
-# In[22]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(20,10))
@@ -3243,7 +8317,10 @@ gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, height_ratios=[0.875,0.03],
 ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 ax3 = fig.add_subplot(gs[0,2])
-fig.suptitle('Rain Rate Evolution over Western Central Sumatra Coast', fontsize=14)
+fs = 20
+title = 'Rain Rate Evolution over ' + cross_title
+
+fig.suptitle(title, fontsize=26)
 
 # Load Data
 	# Control
@@ -3294,27 +8371,44 @@ cf3 = x3.plot.contourf(
 ax1.axvline(x=0, color='k', linestyle='--')
 ax2.axvline(x=0, color='k', linestyle='--')
 ax3.axvline(x=0, color='k', linestyle='--')
-ax1.set_xlabel('Distance from coast [km]')
-ax2.set_xlabel('Distance from coast [km]')
-ax3.set_xlabel('Distance from coast [km]')
-ax1.set_ylabel('UTC')
+
+# for i in range(len(x1.Time[::24].values)-1):
+# 	ax2.axhline(y=x1.Time[::24].values[i], color='r', linestyle='--',)
+# 	ax3.axhline(y=x1.Time[12::24].values[i], color='r', linestyle='--')
+
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax3.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('UTC', fontsize=fs)
 ax2.set_ylabel('')
 ax3.set_ylabel('')
-ax1.invert_xaxis()
-ax2.invert_xaxis()
-ax3.invert_xaxis()
-ax2.set_ylim([x1.Time[0].values,x1.Time[-1].values])
-ax3.set_ylim([x1.Time[0].values,x1.Time[-1].values])
+ax1.set_xticks(np.arange(-200,600,100))
+ax2.set_xticks(np.arange(-200,600,100))
+ax3.set_xticks(np.arange(-200,600,100))
+ax1.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax3.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
 ax1.set_yticks(x1.Time[::24].values)
 ax2.set_yticks(x1.Time[::24].values)
 ax3.set_yticks(x1.Time[::24].values)
-ax1.set_yticklabels(x1.Time[::24].dt.strftime("%m-%d %H").values)
+ax1.set_yticklabels(x1.Time[::24].dt.strftime("%m-%d %H").values, fontsize=fs-10)
 ax2.set_yticklabels('')
 ax3.set_yticklabels('')
+ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
+ax2.set_xlim([x2.Distance[0],x2.Distance[-1]])
+ax3.set_xlim([x3.Distance[0],x3.Distance[-1]])
+ax2.set_ylim([x1.Time[0].values,x1.Time[-1].values])
+ax3.set_ylim([x1.Time[0].values,x1.Time[-1].values])
+ax1.invert_xaxis()
+ax2.invert_xaxis()
+ax3.invert_xaxis()
 # Set titles/labels
-ax1.set_title('Control Simulation', loc='center', fontsize=10)
-ax2.set_title('CRF off @ 00UTC/07LT', loc='center', fontsize=10)
-ax3.set_title('CRF off @ 12UTC/19LT', loc='center', fontsize=10)
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+ax3.set_title('NCRF Sunset', loc='center', fontsize=fs)
+ax3.set_title('c)', loc='left', fontsize=fs)
 # Create grids
 ax1.grid(linestyle='--', axis='y', linewidth=1.5)
 ax2.grid(linestyle='--', axis='y', linewidth=1.5)
@@ -3325,7 +8419,9 @@ ax3.grid(linestyle='--', axis='y', linewidth=1.5)
 	# Rain rate colorbar
 ax2 = fig.add_subplot(gs[1, :])
 cbar = plt.colorbar(cf1, cax=ax2, orientation='horizontal', pad=0 , aspect=100, extend='max')
-cbar.set_label('Rain Rate [$mm d^{-1}$]')
+cbar.set_ticks(np.arange(0,5,1))
+cbar.set_ticklabels(np.arange(0,5,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm d^{-1}$]', fontsize=fs-6)
 
 
 # In[ ]:
@@ -3336,7 +8432,10 @@ gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.2, height_ratios=[0.875,0.03],
 ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 ax3 = fig.add_subplot(gs[0,2])
-fig.suptitle('Anomalous Rain Rate Evolution over Western Central Sumatra Coast', fontsize=14)
+
+fs = 20
+title = 'Rain Rate Evolution over ' + cross_title
+fig.suptitle(title, fontsize=26)
 
 # Load Data
 	# Control
@@ -3409,10 +8508,10 @@ cf3 = x3.plot.contourf(
 ax1.axvline(x=0, color='k', linestyle='--')
 ax2.axvline(x=0, color='k', linestyle='--')
 ax3.axvline(x=0, color='k', linestyle='--')
-ax1.set_xlabel('Distance from coast [km]')
-ax2.set_xlabel('Distance from coast [km]')
-ax3.set_xlabel('Distance from coast [km]')
-ax1.set_ylabel('UTC')
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax3.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('UTC', fontsize=fs-6)
 ax2.set_ylabel('')
 ax3.set_ylabel('')
 ax1.invert_xaxis()
@@ -3426,14 +8525,17 @@ ax3.set_yticks(x1.Time[::24].values)
 ax1.set_yticklabels(x1.Time[::24].dt.strftime("%m-%d %H").values)
 ax2.set_yticklabels('')
 ax3.set_yticklabels('')
-# Set titles/labels
-ax1.set_title('Control Simulation', loc='center', fontsize=10)
-ax2.set_title('CRF off @ 00UTC/07LT', loc='center', fontsize=10)
-ax3.set_title('CRF off @ 12UTC/19LT', loc='center', fontsize=10)
 # Create grids
 ax1.grid(linestyle='--', axis='y', linewidth=1.5)
 ax2.grid(linestyle='--', axis='y', linewidth=1.5)
 ax3.grid(linestyle='--', axis='y', linewidth=1.5)
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+ax3.set_title('NCRF Sunset', loc='center', fontsize=fs)
+ax3.set_title('c)', loc='left', fontsize=fs)
 
 
 # Plot the colorbar
@@ -3441,12 +8543,12 @@ ax3.grid(linestyle='--', axis='y', linewidth=1.5)
 ax4 = fig.add_subplot(gs[1, 0])
 cbar = plt.colorbar(cf1, cax=ax4, orientation='horizontal', pad=0 , aspect=100, extend='both')
 cbar.set_ticks(np.arange(0,5,1))
-cbar.set_label('Rain Rate [$mm d^{-1}$]')
+cbar.set_label('Rain Rate [$mm d^{-1}$]', fontsize=fs-6)
 	# Anomalous rain rate colorbar
 ax5 = fig.add_subplot(gs[1, 1:3])
 cbar = plt.colorbar(cf2, cax=ax5, orientation='horizontal', pad=0 , aspect=100, extend='both')
 cbar.set_ticks(np.arange(-2,3,1))
-cbar.set_label('Anomalous Rain Rate [$mm d^{-1}$]')
+cbar.set_label('Anomalous Rain Rate [$mm d^{-1}$]', fontsize=fs-6)
 
 
 # In[ ]:
@@ -3571,7 +8673,7 @@ cbar.set_label('Rain Rate [$mm d^{-1}$]')
 
 # ##### Rain Rate & Cloud Frac
 
-# In[178]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -3653,7 +8755,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend()
 
 
-# In[34]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -3739,7 +8841,7 @@ ax1.legend()
 
 # ##### 2m Temperature
 
-# In[62]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -3838,7 +8940,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(loc='upper right',ncol=2)
 
 
-# In[30]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -3996,7 +9098,7 @@ ax2.legend(loc='upper right',ncol=1)
 
 # ##### 2m Potential Temperature
 
-# In[36]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -4095,7 +9197,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(loc='upper right',ncol=2)
 
 
-# In[37]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -4252,7 +9354,7 @@ ax2.legend(loc='upper right',ncol=1)
 
 # ##### Normal Wind
 
-# In[44]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -4374,7 +9476,7 @@ ax2.legend(loc='upper right')
 
 # Rain Rate
 
-# In[68]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -4513,7 +9615,8 @@ ocean3 = x3ocean.plot.line(
 ax1.set_xlim([0,24])
 ax1.set_ylim([0,3])
 ax1.set_xticks(np.arange(0,27,3))
-ax1.set_title('Domain Averaged Diurnal Rain Rate over Western Central Sumatra Coast')
+title = f'Domain Averaged Diurnal Rain Rate: {cross_title:s}'
+ax1.set_title(title, fontsize=fs-4)
 ax1.set_xlabel('UTC')
 ax1.set_ylabel('Rain Rate [$mm d^{-1}$]')
 ax1.grid(linestyle='--', axis='x', linewidth=1)
@@ -4521,157 +9624,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncols=3)
 
 
-# In[70]:
-
-
-fig = plt.figure(figsize=(12,7))
-gs = gridspec.GridSpec(nrows=1, ncols=1)
-ax1 = fig.add_subplot(gs[0,0])
-
-land_dist_thresh = -100
-ocean_dist_thresh = 100
-
-# Load Data
-	# Control
-x1 = da_d02_cross_RR_cntl.sel(Time=slice('2015-11-23T00','2015-12-02T00'))
-x1 = x1.groupby('Time.hour').mean()
-		# Average
-x1avg = x1.mean(['Distance','Spread'])
-x1avg = xr.concat([x1avg,x1avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-		# Land only
-x1land = x1.where((x1.Distance<0)&(x1.Distance>land_dist_thresh)).mean(['Distance','Spread'])
-x1land = xr.concat([x1land,x1land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-		# Ocean only
-x1ocean = x1.where((x1.Distance>0)&(x1.Distance<ocean_dist_thresh)).mean(['Distance','Spread'])
-x1ocean = xr.concat([x1ocean,x1ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-
-	# 00 UTC icloud off
-x2 = da_d02_cross_RR_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(0,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
-x2 = x2.mean('Spread')
-da = x2.drop_vars(['Lead','Time','Times'])
-x2 = xr.DataArray(
-				name='RR',
-				data=da.values,
-				dims=['Time','Distance'],
-				coords=dict(
-					Time = da.EnsTime.values,
-					Distance = da.Distance.values,
-					)
-			)
-x2 = x2.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
-		# Average
-x2avg = x2.mean('Distance')
-x2avg = xr.concat([x2avg,x2avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-		# Land
-x2land = x2.where((x2.Distance<0)&(x2.Distance>land_dist_thresh)).mean('Distance')
-x2land = xr.concat([x2land,x2land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-		# Ocean
-x2ocean = x2.where((x2.Distance>0)&(x2.Distance<ocean_dist_thresh)).mean('Distance')
-x2ocean = xr.concat([x2ocean,x2ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-
-	# 12 UTC icloud off
-x3 = da_d02_cross_RR_CRFoff.isel(Time=np.arange(1,25,1)).sel(Lead=slice(1,18,2)).stack(Times=['Lead','Time']).transpose('Times','Distance','Spread')
-x3 = x3.mean('Spread')
-da = x3.drop_vars(['Lead','Time','Times'])
-x3 = xr.DataArray(
-				name='RR',
-				data=da.values,
-				dims=['Time','Distance'],
-				coords=dict(
-					Time = da.EnsTime.values,
-					Distance = da.Distance.values,
-					)
-			)
-x3 = x3.sel(Time=slice('2015-11-23T00','2015-12-02T00')).groupby('Time.hour').mean()
-		# Average
-x3avg = x3.mean('Distance')
-x3avg = xr.concat([x3avg,x3avg[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-		# Land
-x3land = x3.where((x3.Distance<0)&(x3.Distance>land_dist_thresh)).mean('Distance')
-x3land = xr.concat([x3land,x3land[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-		# Ocean
-x3ocean = x3.where((x3.Distance>0)&(x3.Distance<ocean_dist_thresh)).mean('Distance')
-x3ocean = xr.concat([x3ocean,x3ocean[0]],dim='hour').assign_coords(hour=np.arange(0,25,1))
-
-# Control
-avg1 = x1avg.plot.line(
-    ax=ax1,
-	color='k',
-    linewidth=2,
-    linestyle = '-',
-	label='$Control_{avg}$'
-)
-land1 = x1land.plot.line(
-    ax=ax1,
-    color='peru',
-    linewidth=2,
-    linestyle = '-',
-	label='$Control_{land}$'
-)
-ocean1 = x1ocean.plot.line(
-    ax=ax1,
-    color='dodgerblue',
-    linewidth=2,
-    linestyle = '-',
-	label='$Control_{ocean}$'
-)
-# 00UTC CRF off
-avg2 = x2avg.plot.line(
-    ax=ax1,
-	color='k',
-    linewidth=2,
-    linestyle = '--',
-	label='00UTC $CRF off_{avg}$'
-)
-land2 = x2land.plot.line(
-    ax=ax1,
-    color='peru',
-    linewidth=2,
-    linestyle = '--',
-	label='00UTC $CRF off_{land}$'
-)
-ocean2 = x2ocean.plot.line(
-    ax=ax1,
-    color='dodgerblue',
-    linewidth=2,
-    linestyle = '--',
-	label='00UTC $CRF off_{ocean}$'
-)
-# 12UTC CRF off
-avg3 = x3avg.plot.line(
-    ax=ax1,
-	color='k',
-    linewidth=2,
-    linestyle = ':',
-	label='12UTC $CRF off_{avg}$'
-)
-land3 = x3land.plot.line(
-    ax=ax1,
-    color='peru',
-    linewidth=2,
-    linestyle = ':',
-	label='12UTC $CRF off_{land}$'
-)
-ocean3 = x3ocean.plot.line(
-    ax=ax1,
-    color='dodgerblue',
-    linewidth=2,
-    linestyle = ':',
-	label='12UTC $CRF off_{ocean}$'
-)
-
-ax1.set_xlim([0,24])
-ax1.set_ylim([0,5])
-ax1.set_xticks(np.arange(0,27,3))
-ax1.set_title('Diurnal Rain Rate over Western Central Sumatra Coast\nLand:0-'+str(abs(land_dist_thresh))+'km Ocean:0-'+str(ocean_dist_thresh)+'km')
-ax1.set_xlabel('UTC')
-ax1.set_ylabel('Rain Rate [$mm d^{-1}$]')
-ax1.grid(linestyle='--', axis='x', linewidth=1)
-ax1.grid(linestyle='--', axis='y', linewidth=1)
-ax1.legend(ncols=3)
-
-
-# In[89]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -4759,7 +9712,7 @@ ax1.legend(ncols=1)
 
 # Normal Winds
 
-# In[75]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -4904,7 +9857,7 @@ ax1.legend(ncols=2,loc='upper right')
 
 # Cloud Fraction
 
-# In[81]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,7))
@@ -4915,6 +9868,8 @@ land_dist_thresh = -100 # km
 ocean_dist_thresh = 100 # km
 # land_dist_thresh = da_d02_cross_CLDFRA_cntl.Distance.min().values # km
 # ocean_dist_thresh = da_d02_cross_CLDFRA_cntl.Distance.max().values # km
+
+local_time = np.concatenate((np.arange(7,25,3),np.arange(1,10,3)))
 
 # Load Data
 	# Low Cloud Fraction
@@ -5024,11 +9979,146 @@ ocean3 = x3ocean.plot.line(
 	label='$Upper_{ocean}$'
 )
 
-ax1.set_xlim([0,24])
+
 ax1.set_ylim([0,x3land.max()+.05])
-ax1.set_xticks(np.arange(0,27,3))
-ax1.set_title('Domain Averaged Diurnal Cloud Fraction over Western Central Sumatra Coast\nLand:0-'+str(abs(land_dist_thresh))+'km Ocean:0-'+str(ocean_dist_thresh)+'km')
-ax1.set_xlabel('UTC')
+if cross_title == 'Borneo Northwest': ax1.set_xticks(np.arange(0,27,3)-1)
+else: ax1.set_xticks(np.arange(0,27,3))
+ax1.set_xticklabels(local_time, fontsize=fs-6)
+ax1.set_title('Domain Averaged Diurnal Cloud Fraction over Western Central Sumatra Coast Control\nLand:0-'+str(abs(land_dist_thresh))+'km Ocean:0-'+str(ocean_dist_thresh)+'km')
+ax1.set_xlabel('Local Time')
+ax1.set_xlim([0,24])
+ax1.set_ylabel('Cloud Fraction')
+ax1.grid(linestyle='--', axis='x', linewidth=1)
+ax1.grid(linestyle='--', axis='y', linewidth=1)
+ax1.legend(ncol=3)
+
+
+# In[ ]:
+
+
+fig = plt.figure(figsize=(15,7))
+gs = gridspec.GridSpec(nrows=1, ncols=1)
+ax1 = fig.add_subplot(gs[0,0])
+
+land_dist_thresh = -241 # km
+ocean_dist_thresh = 100 # km
+# land_dist_thresh = da_d02_cross_CLDFRA_CRFoff.Distance.min().values # km
+# ocean_dist_thresh = da_d02_cross_CLDFRA_CRFoff.Distance.max().values # km
+
+# Load Data
+	# Low Cloud Fraction
+x1 = da_d02_cross_LowCLDFRA_CRFoff.sel(Lead=slice(0,18,2)).mean(['Lead']).rename({'Time':'hour'})
+x1 = xr.concat([x1[23],x1[0:24]], dim='hour',data_vars='all').assign_coords(hour=np.arange(0,25,1))
+		# Average
+x1avg = x1.where((x1.Distance<ocean_dist_thresh)&(x1.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x1avg = x1avg.assign_coords(hour=np.arange(0,25,1))
+		# Land only
+x1land = x1.where((x1.Distance<0)&(x1.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x1land = x1land.assign_coords(hour=np.arange(0,25,1))
+		# Ocean only
+x1ocean = x1.where((x1.Distance>0)&(x1.Distance<ocean_dist_thresh)).mean(['Distance','Spread'])
+x1ocean = x1ocean.assign_coords(hour=np.arange(0,25,1))
+
+	# Mid Cloud Fraction
+x2 = da_d02_cross_MidCLDFRA_CRFoff.sel(Lead=slice(0,18,2)).mean(['Lead']).rename({'Time':'hour'})
+x2 = xr.concat([x2[23],x2[0:24]], dim='hour',data_vars='all').assign_coords(hour=np.arange(0,25,1))
+		# Average
+x2avg = x2.where((x2.Distance<ocean_dist_thresh)&(x2.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x2avg = x2avg.assign_coords(hour=np.arange(0,25,1))
+		# Land only
+x2land = x2.where((x2.Distance<0)&(x2.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x2land = x2land.assign_coords(hour=np.arange(0,25,1))
+		# Ocean only
+x2ocean = x2.where((x2.Distance>0)&(x2.Distance<ocean_dist_thresh)).mean(['Distance','Spread'])
+x2ocean = x2ocean.assign_coords(hour=np.arange(0,25,1))
+
+	# High Cloud Fraction
+x3 = da_d02_cross_HighCLDFRA_CRFoff.sel(Lead=slice(0,18,2)).mean(['Lead']).rename({'Time':'hour'})
+x3 = xr.concat([x3[23],x3[0:24]], dim='hour',data_vars='all').assign_coords(hour=np.arange(0,25,1))
+		# Average
+x3avg = x3.where((x3.Distance<ocean_dist_thresh)&(x3.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x3avg = x3avg.assign_coords(hour=np.arange(0,25,1))
+		# Land only
+x3land = x3.where((x3.Distance<0)&(x3.Distance>land_dist_thresh)).mean(['Distance','Spread'])
+x3land = x3land.assign_coords(hour=np.arange(0,25,1))
+		# Ocean only
+x3ocean = x3.where((x3.Distance>0)&(x3.Distance<ocean_dist_thresh)).mean(['Distance','Spread'])
+x3ocean = x3ocean.assign_coords(hour=np.arange(0,25,1))
+
+# Low Clouds
+avg1 = x1avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = '-',
+	label='$Low_{avg}$'
+)
+land1 = x1land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '-',
+	label='$Low_{land}$'
+)
+ocean1 = x1ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '-',
+	label='$Low_{ocean}$'
+)
+# Mid Clouds
+avg2 = x2avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = '--',
+	label='$Mid_{avg}$'
+)
+land2 = x2land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = '--',
+	label='$Mid_{land}$'
+)
+ocean2 = x2ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = '--',
+	label='$Mid_{ocean}$'
+)
+# Upper Clouds
+avg3 = x3avg.plot.line(
+    ax=ax1,
+	color='k',
+    linewidth=2,
+    linestyle = ':',
+	label='$Upper_{avg}$'
+)
+land3 = x3land.plot.line(
+    ax=ax1,
+    color='peru',
+    linewidth=2,
+    linestyle = ':',
+	label='$Upper_{land}$'
+)
+ocean3 = x3ocean.plot.line(
+    ax=ax1,
+    color='dodgerblue',
+    linewidth=2,
+    linestyle = ':',
+	label='$Upper_{ocean}$'
+)
+
+ax1.set_ylim([0,x3land.max()+.05])
+if cross_title == 'Borneo Northwest': ax1.set_xticks(np.arange(0,27,3)-1)
+else: ax1.set_xticks(np.arange(0,27,3))
+ax1.set_xticklabels(local_time, fontsize=fs-6)
+ax1.set_title('Domain Averaged Diurnal Cloud Fraction over Western Central Sumatra Coast NCRF\nLand:0-'+str(abs(land_dist_thresh))+'km Ocean:0-'+str(ocean_dist_thresh)+'km')
+ax1.set_xlabel('Local Time')
+ax1.set_xlim([0,24])
 ax1.set_ylabel('Cloud Fraction')
 ax1.grid(linestyle='--', axis='x', linewidth=1)
 ax1.grid(linestyle='--', axis='y', linewidth=1)
@@ -5037,7 +10127,7 @@ ax1.legend(ncol=3)
 
 # HFX
 
-# In[21]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5117,7 +10207,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend()
 
 
-# In[90]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5191,7 +10281,7 @@ ax1.legend(ncol=1)
 
 # Surface Net Flux Down
 
-# In[91]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5352,7 +10442,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=3)
 
 
-# In[161]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5435,7 +10525,7 @@ ax1.legend()
 
 # 2m Temperature
 
-# In[50]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5543,7 +10633,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=2,loc='upper right')
 
 
-# In[42]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5630,7 +10720,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=1,loc='upper right')
 
 
-# In[43]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5740,7 +10830,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=1,loc='upper right')
 
 
-# In[44]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5822,7 +10912,7 @@ ax1.legend(ncol=1,loc='upper right')
 
 # 2m Potential Temperature
 
-# In[51]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -5930,7 +11020,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=2,loc='upper right')
 
 
-# In[38]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -6017,7 +11107,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=1,loc='upper right')
 
 
-# In[39]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -6127,7 +11217,7 @@ ax1.grid(linestyle='--', axis='y', linewidth=1)
 ax1.legend(ncol=1,loc='upper right')
 
 
-# In[41]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,7))
@@ -6209,7 +11299,7 @@ ax1.legend(ncol=1,loc='upper right')
 
 # ### Diurnal Composite plots
 
-# In[93]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -6381,7 +11471,7 @@ cbar.set_label('Normalized Rain Rate [RR/$\sigma_{cntl}$]')
 
 # #### Normal Wind
 
-# In[96]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -6390,7 +11480,7 @@ ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 ax3 = fig.add_subplot(gs[0,2])
 
-level = 860
+level = 950
 fig.suptitle(str(level)+'hPa Normal Wind Diurnal Composite over Western Central Sumatra Coast', fontsize=14)
 
 smoothing_num=3
@@ -6548,7 +11638,7 @@ cbar.set_ticks(np.arange(np.floor(x1.min()),(-np.floor(x1.min()))+2,2))
 cbar.set_label('Normal wind @ ' + str(level) + 'hPa [$m/s$]')
 
 
-# In[137]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -6720,7 +11810,7 @@ cbar.set_ticks(np.arange(-4,5,1))
 cbar.set_label('Normalized Normal wind @ ' + str(level) + 'hPa [$U_{Normal}/\sigma_{cntl}$]')
 
 
-# In[25]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -6729,7 +11819,7 @@ ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 ax3 = fig.add_subplot(gs[0,2])
 
-level = 200
+level = 950
 fig.suptitle(str(level)+'hPa Normalized Normal Wind Difference from Control over Western Central Sumatra Coast', fontsize=14)
 
 smoothing_num=3
@@ -6896,7 +11986,7 @@ cbar.set_label('[$(U_{Normal}-U_{Normal_{cntl}})/\sigma_{cntl}$]')
 
 # #### Virtual Temperature
 
-# In[64]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -7059,7 +12149,7 @@ cbar.set_ticks(np.arange(295,302,1))
 cbar.set_label('Virtual Temperature @ ' + str(level) + 'hPa [$Tv$]')
 
 
-# In[75]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -7235,7 +12325,7 @@ cbar.set_label('[$(Tv-Tv_{cntl})/\sigma_{cntl}$]')
 
 # #### Vertical Wind Speed
 
-# In[97]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -7398,7 +12488,7 @@ cbar.set_ticks(np.arange(-0.1,0.11,.02))
 cbar.set_label('Vertical wind @ ' + str(level) + 'hPa [$m/s$]')
 
 
-# In[68]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -7570,7 +12660,7 @@ cbar.set_ticks(np.arange(-4,5,1))
 cbar.set_label('Normalized Vertical wind @ ' + str(level) + 'hPa [$W/\sigma_{cntl}$]')
 
 
-# In[73]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -7747,7 +12837,7 @@ cbar.set_label('[$(W-W_{cntl})/\sigma_{cntl}$]')
 
 # #### Water Vapor
 
-# In[22]:
+# In[ ]:
 
 
 def round_to_two_significant_figures(number):
@@ -7795,7 +12885,7 @@ def round_to_one_significant_figures(number):
 round_to_one_significant_figures(0.00001427)
 
 
-# In[50]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -7958,7 +13048,7 @@ cbar.set_ticks(np.linspace(round_to_two_significant_figures(x1.min()),round_to_t
 cbar.set_label('Water vapor mixing ratio @ ' + str(level) + 'hPa [$kg/kg$]')
 
 
-# In[41]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -8136,7 +13226,7 @@ cbar.set_label('[$(QV-QV_{cntl})/\sigma_{cntl}$]')
 
 # #### Total Q
 
-# In[26]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -8299,7 +13389,7 @@ cbar.set_ticks(np.linspace(round_to_two_significant_figures(x1.min()),round_to_t
 cbar.set_label('Total Q mixing ratio @ ' + str(level) + 'hPa [$kg/kg$]')
 
 
-# In[28]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -8477,7 +13567,7 @@ cbar.set_label('[$(QTotal-QTotal_{cntl})/\sigma_{cntl}$]')
 
 # #### Latent Heating
 
-# In[132]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -8650,7 +13740,7 @@ cbar.set_ticks(np.linspace(x1_lims[0],x1_lims[1],15)[::2])
 cbar.set_label('Latent Heating @ ' + str(level) + 'hPa [$K/s$]')
 
 
-# In[98]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -8821,7 +13911,7 @@ cbar.set_ticks(np.arange(-4,5,1))
 cbar.set_label('Normalized Latent Heating @ ' + str(level) + 'hPa [$W/\sigma_{cntl}$]')
 
 
-# In[131]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -9006,7 +14096,7 @@ cbar.set_label('[$(H_DIABATIC-H_DIABATIC_{cntl})/\sigma_{cntl}$]')
 
 # #### Cloud Fraction
 
-# In[101]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -9193,7 +14283,10 @@ gs = gridspec.GridSpec(nrows=2, ncols=3, hspace=0.25, height_ratios=[0.875,0.03]
 ax1 = fig.add_subplot(gs[0,0])
 ax2 = fig.add_subplot(gs[0,1])
 ax3 = fig.add_subplot(gs[0,2])
-fig.suptitle('Rain Rate Diurnal Composite over Western Central Sumatra Coast', fontsize=14)
+
+title = 'Rain Rate Diurnal Composite over ' + cross_title
+
+fig.suptitle(title, fontsize=26)
 
 smoothing_num=3
 
@@ -9241,7 +14334,8 @@ cf1 = x1.plot.contourf(
 	add_colorbar=False,
 	levels=np.arange(0,4.25,0.25),
 	cmap='gray_r',
-	center=0
+	center=0,
+	extend='max'
 )
 
 # Plot the cross-sectional data
@@ -9252,56 +14346,133 @@ cf2 = x2.plot.contourf(
 	add_colorbar=False,
 	levels=np.arange(0,4.25,0.25),
 	cmap='gray_r',
-	center=0
+	center=0,
+	extend='max'
 )
 
 # Plot the cross-sectional data
-cf3 = x3.plot.contourf(
+cf3 = x3[13:].plot.contourf(
 	ax=ax3,
 	x = 'Distance',
     y = 'hour',
 	add_colorbar=False,
 	levels=np.arange(0,4.25,0.25),
 	cmap='gray_r',
-	center=0
+	center=0,
+	extend='max'
 )
 
+# Fontsize
+fs = 20
+
 # Plot phase speed lines
-ax1.plot([-25,137],[9,24] , color='r')
-ax1.text(60, 18, '3 m/s', color='r', weight='bold')
-ax1.plot([-25,245],[9,24] , color='r')
-ax1.text(165, 15, '5 m/s', color='r', weight='bold')
-ax1.plot([-25,623],[9,24] , color='r')
-ax1.text(300, 13.5, '12 m/s', color='r', weight='bold')
+# ax1.plot([-45,117],[9,24] , color='r')
+# ax1.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax1.plot([-45,225],[9,24] , color='r')
+# ax1.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax1.plot([-45,603],[9,24] , color='r')
+# ax1.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax1.plot([-25,137],[33,48] , color='r')
-ax1.text(60, 42, '3 m/s', color='r', weight='bold')
-ax1.plot([-25,245],[33,48] , color='r')
-ax1.text(165, 39, '5 m/s', color='r', weight='bold')
-ax1.plot([-25,623],[33,48] , color='r')
-ax1.text(300, 37.5, '12 m/s', color='r', weight='bold')
+# ax1.plot([-45,117],[33,48] , color='r')
+# ax1.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax1.plot([-45,225],[33,48] , color='r')
+# ax1.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax1.plot([-45,603],[33,48] , color='r')
+# ax1.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax2.plot([-25,137],[9,24] , color='r')
-ax2.text(60, 18, '3 m/s', color='r', weight='bold')
-ax2.plot([-25,245],[9,24] , color='r')
-ax2.text(165, 15, '5 m/s', color='r', weight='bold')
-ax2.plot([-25,623],[9,24] , color='r')
-ax2.text(300, 13.5, '12 m/s', color='r', weight='bold')
+# ax2.plot([-45,117],[9,24] , color='r')
+# ax2.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax2.plot([-45,225],[9,24] , color='r')
+# ax2.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax2.plot([-45,603],[9,24] , color='r')
+# ax2.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax3.plot([-25,137],[9,24] , color='r')
-ax3.text(60, 18, '3 m/s', color='r', weight='bold')
-ax3.plot([-25,245],[9,24] , color='r')
-ax3.text(165, 15, '5 m/s', color='r', weight='bold')
-ax3.plot([-25,623],[9,24] , color='r')
-ax3.text(300, 13.5, '12 m/s', color='r', weight='bold')
+# ax3.plot([-45,117],[9,24] , color='r')
+# ax3.text(60, 19, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax3.plot([-45,225],[9,24] , color='r')
+# ax3.text(180, 15, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax3.plot([-45,603],[9,24] , color='r')
+# ax3.text(300, 13, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
-ax3.plot([-25,137],[33,48] , color='r')
-ax3.text(60, 42, '3 m/s', color='r', weight='bold')
-ax3.plot([-25,245],[33,48] , color='r')
-ax3.text(165, 39, '5 m/s', color='r', weight='bold')
-ax3.plot([-25,623],[33,48] , color='r')
-ax3.text(300, 37.5, '12 m/s', color='r', weight='bold')
+# ax3.plot([-45,117],[33,48] , color='r')
+# ax3.text(60, 43, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax3.plot([-45,225],[33,48] , color='r')
+# ax3.text(180, 39, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+# ax3.plot([-45,603],[33,48] , color='r')
+# ax3.text(300, 37, '12 m/s', color='r', weight='bold',fontsize=fs-6)
 
+# Borneo phase speed lines
+ax1.plot([-205,-43],[13.5,28.5] , color='r')
+ax1.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+ax1.plot([-205,65],[13.5,28.5] , color='r')
+ax1.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+ax1.plot([-205,530],[13.5,30.5] , color='r')
+ax1.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+ax1.plot([-205,-43],[37.5,52.5] , color='r')
+ax1.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+ax1.plot([-205,65],[37.5,52.5] , color='r')
+ax1.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+ax1.plot([-205,530],[37.5,54.5] , color='r')
+ax1.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+ax2.plot([-205,-43],[13.5,28.5] , color='r')
+ax2.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+ax2.plot([-205,65],[13.5,28.5] , color='r')
+ax2.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+ax2.plot([-205,530],[13.5,30.5] , color='r')
+ax2.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+ax3.plot([-205,-43],[13.5,28.5] , color='r')
+ax3.text(-145, 20, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+ax3.plot([-205,65],[13.5,28.5] , color='r')
+ax3.text(25, 19.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+ax3.plot([-205,530],[13.5,30.5] , color='r')
+ax3.text(145, 16, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+ax3.plot([-205,-43],[37.5,52.5] , color='r')
+ax3.text(-145, 44, '3 m/s', color='r', weight='bold',fontsize=fs-6)
+ax3.plot([-205,65],[37.5,52.5] , color='r')
+ax3.text(25, 43.5, '5 m/s', color='r', weight='bold',fontsize=fs-6)
+ax3.plot([-205,530],[37.5,54.5] , color='r')
+ax3.text(145, 40, '12 m/s', color='r', weight='bold',fontsize=fs-6)
+
+
+# Plot the vertical line at approximate coastline
+ax1.axvline(x=0, color='k', linestyle='--')
+ax2.axvline(x=0, color='k', linestyle='--')
+ax3.axvline(x=0, color='k', linestyle='--')
+ax2.axhline(y=0, color='r', linestyle='--', linewidth=3)
+ax3.axhline(y=12, color='r', linestyle='--', linewidth=2)
+ax1.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax2.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax3.set_xlabel('Distance from coast [km]', fontsize=fs-6)
+ax1.set_ylabel('Local Time', fontsize=fs)
+ax2.yaxis.tick_right()
+ax2.yaxis.set_label_position("right")
+ax2.set_ylabel('')
+ax3.yaxis.tick_right()
+ax3.yaxis.set_label_position("right")
+ax3.set_ylabel('Lead Time', fontsize=fs)
+ax1.set_xticks(np.arange(-200,600,100))
+ax2.set_xticks(np.arange(-200,600,100))
+ax3.set_xticks(np.arange(-200,600,100))
+ax1.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax2.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax3.set_xticklabels(np.arange(-200,600,100),fontsize=fs-6)
+ax1.set_yticks(x1.hour[0::3].values+0.5)
+ax2.set_yticks(x1.hour[0::3].values+0.5)
+ax3.set_yticks(x1.hour[0::3].values+0.5)
+ax1.set_yticklabels(np.concatenate((np.arange(7,25,3),np.arange(1,25,3),np.arange(1,7,3))),fontsize=fs-6)
+ax2.set_yticklabels(np.arange(0,48,3),fontsize=fs-6)
+ax3.set_yticklabels(np.arange(-12,36,3),fontsize=fs-6)
+# Set titles/labels
+ax1.set_title('Control', loc='center', fontsize=fs)
+ax1.set_title('a)', loc='left', fontsize=fs)
+ax2.set_title('NCRF Sunrise', loc='center', fontsize=fs)
+ax2.set_title('b)', loc='left', fontsize=fs)
+ax3.set_title('NCRF Sunset', loc='center', fontsize=fs)
+ax3.set_title('c)', loc='left', fontsize=fs)
 
 ax1.set_xlim([x1.Distance[0],x1.Distance[-1]])
 ax2.set_xlim([x2.Distance[0],x2.Distance[-1]])
@@ -9309,40 +14480,18 @@ ax3.set_xlim([x3.Distance[0],x3.Distance[-1]])
 ax1.set_ylim([0,46.5])
 ax2.set_ylim([0,46.5])
 ax3.set_ylim([0,46.5])
-# Plot the vertical line at approximate coastline
-ax1.axvline(x=0, color='k', linestyle='--')
-ax2.axvline(x=0, color='k', linestyle='--')
-ax3.axvline(x=0, color='k', linestyle='--')
-ax2.axhline(y=0, color='r', linestyle='--', linewidth=3)
-ax3.axhline(y=12, color='r', linestyle='--')
-ax1.set_xlabel('Distance from coast [km]')
-ax2.set_xlabel('Distance from coast [km]')
-ax3.set_xlabel('Distance from coast [km]')
-ax1.set_ylabel('UTC')
-ax2.set_ylabel('')
-ax3.set_ylabel('')
 ax1.invert_xaxis()
 ax2.invert_xaxis()
 ax3.invert_xaxis()
-ax1.set_yticks(x1.hour[0::3].values+0.5)
-ax2.set_yticks(x1.hour[0::3].values+0.5)
-ax3.set_yticks(x1.hour[0::3].values+0.5)
-ax1.set_yticklabels(np.concatenate((np.arange(0,24,3),np.arange(0,24,3))))
-ax2.set_yticklabels(np.arange(0,48,3))
-ax3.set_yticklabels(np.arange(-12,36,3))
-# Set titles/labels
-ax1.set_title('Control Simulation', loc='center', fontsize=10)
-ax2.set_title('CRF off @ 00UTC/07LT', loc='center', fontsize=10)
-ax3.set_title('CRF off @ 12UTC/19LT', loc='center', fontsize=10)
-# ax1.set_title('Western Central Coast of Sumatra', loc='right', fontsize=10)
-# ax1.set_title('', loc='center')
+
 
 # Plot the colorbar
 	# Rain rate colorbar
 cax1 = fig.add_subplot(gs[1, :])
 cbar = plt.colorbar(cf1, cax=cax1, orientation='horizontal', pad=0 , aspect=100)
 cbar.set_ticks(np.arange(0,5,1))
-cbar.set_label('Rain Rate [$mm d^{-1}$]')
+cbar.set_ticklabels(np.arange(0,5,1), fontsize=fs-6)
+cbar.set_label('Rain Rate [$mm d^{-1}$]', fontsize=fs-6)
 
 
 # In[ ]:
@@ -9518,7 +14667,7 @@ cbar.set_label("[$(RR-RR_{cntl})/\sigma_{cntl}$]")
 
 # #### CAPE
 
-# In[38]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -9680,7 +14829,7 @@ cbar.set_ticks(np.arange(0,2200,200))
 cbar.set_label('CAPE [$J/kg$]')
 
 
-# In[40]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -9853,7 +15002,7 @@ cbar.set_label("[$(CAPE-CAPE{cntl})/\sigma_{cntl}$]")
 
 # #### CIN
 
-# In[37]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -10014,7 +15163,7 @@ cbar.set_ticks(np.arange(0,55,5))
 cbar.set_label('CIN [$J/kg$]')
 
 
-# In[41]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -10187,7 +15336,7 @@ cbar.set_label("[$(CIN-CIN{cntl})/\sigma_{cntl}$]")
 
 # #### Surface SW Flux Down
 
-# In[30]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -10343,7 +15492,7 @@ cbar.set_ticks(np.arange(0,1100,100))
 cbar.set_label('SW SFC Flux Down [$W/m^{2}$]')
 
 
-# In[28]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -10511,7 +15660,7 @@ cbar.set_ticks(np.arange(0,6,1))
 cbar.set_label('Normalized SW SFC Flux Down [SwFlxDn/$\sigma_{cntl}$]')
 
 
-# In[26]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -10683,7 +15832,7 @@ cbar.set_label("[$(SwFlxDn-SwFlxDn_{cntl})/\sigma_{cntl}$]")
 
 # #### Surface Latent Heat Flux
 
-# In[31]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -10841,7 +15990,7 @@ cbar.set_ticks(np.arange(0,600,100))
 cbar.set_label('Surface Latent Heat Flux [$W/m^{2}$]')
 
 
-# In[49]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -11009,7 +16158,7 @@ cbar.set_ticks(np.arange(0,6,1))
 cbar.set_label('Surface Latent Heat Flux [LH/$\sigma_{cntl}$]')
 
 
-# In[38]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -11181,7 +16330,7 @@ cbar.set_label("[$(LH-LH_{cntl})/\sigma_{cntl}$]")
 
 # #### Upward Heat Flux at Surface
 
-# In[22]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -11342,7 +16491,7 @@ cbar.set_ticks(np.arange(-300,350,50))
 cbar.set_label('Surface Heat Flux Up [$W/m^{2}$]')
 
 
-# In[72]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -11513,7 +16662,7 @@ cbar.set_ticks(np.arange(-4,5,1))
 cbar.set_label('Normalized Surface Heat Flux Up [HFX/$\sigma_{cntl}$]')
 
 
-# In[73]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -11686,7 +16835,7 @@ cbar.set_label("[$(HFX-HFX{cntl})/\sigma_{cntl}$]")
 
 # #### Upward Moisture Flux at Surface
 
-# In[46]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -11863,7 +17012,7 @@ level = 200
 
 # #### Normal Wind
 
-# In[107]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -12040,7 +17189,7 @@ cbar.set_label('[$(U_{Normal}-U_{Normal_{cntl}})/\sigma_{cntl}$]')
 
 # ##### Vertically Averaged
 
-# In[105]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -12227,7 +17376,7 @@ cbar.set_label('[$(U_{Normal}-U_{Normal_{cntl}})/\sigma_{cntl}$]')
 
 # #### Virtual Temperature
 
-# In[163]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -12578,7 +17727,7 @@ cbar.set_label('[$(W-W_{cntl})/\sigma_{cntl}$]')
 
 # #### Water Vapor
 
-# In[49]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -12755,7 +17904,7 @@ cbar.set_label('[$(QV-QV_{cntl})/\sigma_{cntl}$]')
 
 # Vertically Integrated
 
-# In[76]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -12940,7 +18089,7 @@ cbar.set_label('[$(QV-QV_{cntl})/\sigma_{cntl}$]')
 
 # #### Total Q
 
-# In[33]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -13120,7 +18269,7 @@ cbar.set_label('[$(QTotal-QTotal_{cntl})/\sigma_{cntl}$]')
 
 # ##### Vertically Integrated
 
-# In[161]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -13305,7 +18454,7 @@ cbar.set_label('[$(QTotal-QTotal_{cntl})/\sigma_{cntl}$]')
 
 # #### Latent Heating
 
-# In[139]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -13490,7 +18639,7 @@ cbar.set_label('[$(H_DIABATIC-H_DIABATIC_{cntl})/\sigma_{cntl}$]')
 
 # #### Cloud Fraction
 
-# In[86]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -13669,7 +18818,7 @@ cbar.set_label('[$(Cld-Cld_{cntl})/\sigma_{cntl}$]')
 
 # ##### All Clouds
 
-# In[34]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -13825,7 +18974,7 @@ cbar.set_label('Cloud Fraction')
 
 # ##### Low Clouds
 
-# In[29]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -14001,7 +19150,7 @@ cbar.set_label('[$(Cld-Cld_{cntl})/\sigma_{cntl}$]')
 
 # ##### Mid Clouds
 
-# In[31]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -14177,7 +19326,7 @@ cbar.set_label('[$(Cld-Cld_{cntl})/\sigma_{cntl}$]')
 
 # ##### High Clouds
 
-# In[32]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(19.5,8))
@@ -14355,7 +19504,7 @@ cbar.set_label('[$(Cld-Cld_{cntl})/\sigma_{cntl}$]')
 
 # #### Diurnal Composite Relationship
 
-# In[20]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,5))
@@ -14453,7 +19602,7 @@ ax3.set_ylim([-600,0])
 ax3.grid(linestyle='--', axis='both', linewidth=1)
 
 
-# In[47]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,5))
@@ -14547,7 +19696,7 @@ ax3.grid(linestyle='--', axis='both', linewidth=1)
 
 # #### Time Series Relationship
 
-# In[36]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,12))
@@ -14680,13 +19829,13 @@ ax5.axvline(x=0, color='k', linestyle='-', linewidth=0.75)
 ax5.legend(loc='upper right')
 
 
-# In[38]:
+# In[ ]:
 
 
 da2.stderror
 
 
-# In[41]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,12))
@@ -14822,7 +19971,7 @@ ax5.axvline(x=0, color='k', linestyle='-', linewidth=0.75)
 ax5.legend(loc='upper right')
 
 
-# In[46]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,12))
@@ -14955,7 +20104,7 @@ ax5.axvline(x=0, color='k', linestyle='-', linewidth=0.75)
 ax5.legend(loc='upper right')
 
 
-# In[49]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,12))
@@ -15089,7 +20238,7 @@ ax5.axvline(x=0, color='k', linestyle='-', linewidth=0.75)
 ax5.legend(loc='upper right')
 
 
-# In[66]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(15,12))
@@ -15232,7 +20381,7 @@ ax5.axvline(x=0, color='k', linestyle='-', linewidth=0.75)
 ax5.legend(loc='upper right')
 
 
-# In[43]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,6))
@@ -15372,7 +20521,7 @@ ax5.grid(linestyle='--', axis='both', linewidth=1)
 # ax5.legend(loc='upper right')
 
 
-# In[46]:
+# In[ ]:
 
 
 fig = plt.figure(figsize=(12,6))
@@ -15509,7 +20658,7 @@ ax5.grid(linestyle='--', axis='both', linewidth=1)
 
 # #### Doppler Shift Analysis
 
-# In[33]:
+# In[ ]:
 
 
 start_LT = 7
@@ -15578,7 +20727,7 @@ cbar.minorticks_off()
 
 # Control/NCRF
 
-# In[40]:
+# In[ ]:
 
 
 # Load in the data
@@ -15661,7 +20810,7 @@ for i in range(1):
 
 # Difference
 
-# In[35]:
+# In[ ]:
 
 
 # Load in the data
@@ -15748,7 +20897,7 @@ for i in range(1):
 
 # Control & NCRF
 
-# In[29]:
+# In[ ]:
 
 
 # Load in the data
@@ -15963,7 +21112,7 @@ for i in range(Tv_NCRF.shape[0]):
 
 # Control
 
-# In[80]:
+# In[ ]:
 
 
 # Load in the data
@@ -16077,7 +21226,7 @@ for i in range(Theta_cntl.shape[0]):
 
 # NCRF
 
-# In[81]:
+# In[ ]:
 
 
 # Load in the data
@@ -16192,7 +21341,7 @@ for i in range(Theta_NCRF.shape[0]):
 
 # Control & NCRF
 
-# In[69]:
+# In[ ]:
 
 
 # Load in the data
@@ -16404,7 +21553,7 @@ for i in range(Theta_NCRF.shape[0]):
 	mpl.pyplot.close()
 
 
-# In[72]:
+# In[ ]:
 
 
 # Load in the data
@@ -16623,7 +21772,7 @@ for i in range(Theta_NCRF.shape[0]):
 
 # Difference
 
-# In[76]:
+# In[ ]:
 
 
 # Load in the data
@@ -16701,7 +21850,7 @@ for i in range(Theta_NCRF.shape[0]):
 	mpl.pyplot.close()
 
 
-# In[61]:
+# In[ ]:
 
 
 # Load in the data
@@ -16860,7 +22009,7 @@ for i in range(Theta_NCRF.shape[0]):
 
 # Control & NCRF
 
-# In[78]:
+# In[ ]:
 
 
 # Load in the data
