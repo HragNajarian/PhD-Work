@@ -73,7 +73,7 @@ import sys
 
 ##############################################################################
 
-def interp_variable(input_file, pressure_file, variable_name, output_dir, vertical_levels):
+def interp_variable(input_file, pressure_file, variable_name, output_dir, vertical_levels, file_name):
     # Open the input netCDF file
     dataset = nc.Dataset(input_file, 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
     # Load in the dataset with the pressure variable to interpolate from
@@ -89,9 +89,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         if i == 'U':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'U' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'U' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_U', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_U', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -118,9 +118,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         if i == 'V':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'V' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'V' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_V', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_V', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -147,9 +147,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         if i == 'W':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'W' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'W' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_W', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_W', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -176,9 +176,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'QV':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'QV' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'QV' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_QV', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_QV', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -203,9 +203,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'QC':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'QC' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'QC' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_QC', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_QC', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -230,9 +230,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'QR':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'QR' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'QR' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_QR', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_QR', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -257,9 +257,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'QI':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'QI' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'QI' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_QI', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_QI', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -284,9 +284,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'QS':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'QS' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'QS' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_QS', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_QS', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -311,9 +311,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'QG':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'QG' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'QG' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_QG', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_QG', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -338,9 +338,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'CLDFRA':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'CLDFRA' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'CLDFRA' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_CLDFRA', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_CLDFRA', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -365,9 +365,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'Theta':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'Theta' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'Theta' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_Theta', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_Theta', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -392,9 +392,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'H_DIABATIC':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'H_DIABATIC' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'H_DIABATIC' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_H_DIABATIC', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_H_DIABATIC', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -419,9 +419,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'SWClear':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'SWClear' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'SWClear' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_SWClear', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_SWClear', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -446,9 +446,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'SWAll':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'SWAll' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'SWAll' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_SWAll', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_SWAll', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -473,9 +473,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'LWClear':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'LWClear' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'LWClear' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_LWClear', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_LWClear', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -500,9 +500,9 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
         elif i == 'LWAll':
             # Create new .nc file we can write to and name it appropriately
             if levels == 1:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_' + 'LWAll' + str(vertical_levels), 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_' + 'LWAll' + str(vertical_levels), 'w', clobber=True)
             else:
-                output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_interp_LWAll', 'w', clobber=True)
+                output_dataset = nc.Dataset(output_dir + file_name + '_interp_LWAll', 'w', clobber=True)
             output_dataset.setncatts(dataset.__dict__)
             # Create the dimensions based on global dimensions, with exception to bottom_top
             for dim_name, dim in dataset.dimensions.items():
@@ -530,34 +530,33 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
 # In[ ]:
 
 
-# Pick the main folder:
+## Pick the main folder:
 # parent_dir = '/where/your/wrfoutfiles/exist'
 parent_dir = sys.argv[1]
 
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-03--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-06--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-09--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-12--11-26-12'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff/MC_Sumatra_2015-11-25--26/2015-11-25-15--11-26-12'
-
 # Pick the raw folders:
-input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
-input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
+# input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
+# input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
+raw_folder_d02 = '/raw/d02_sunrise'
+input_file_d02 = parent_dir + raw_folder_d02
 
 # Where does your 3-D pressure file live
-pressure_file_d01 = parent_dir + '/L1/d01_P'
-pressure_file_d02 = parent_dir + '/L1/d02_P'
+# pressure_file_d01 = parent_dir + '/L1/d01_P'
+# pressure_file_d02 = parent_dir + '/L1/d02_P'
+
+pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
+
 
 # Output to level 2 directory:
 output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
 # variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-variable_name = []
+variable_name = ['QV', 'QC', 'QR', 'QI', 'QS', 'QG']
 
 # Declare the vertial levels you want to interpolate:
 # vertical_levels = np.array(1000)
 # vertical_levels = np.arange(1000,0,-50)
 vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
-interp_variable(input_file_d01, pressure_file_d01, variable_name, output_dir, vertical_levels)
-interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels)
+# interp_variable(input_file_d01, pressure_file_d01, variable_name, output_dir, vertical_levels)
+interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels, file_name=raw_folder_d02[5:])
 

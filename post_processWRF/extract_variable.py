@@ -4,6 +4,15 @@
 # In[ ]:
 
 
+'''
+Author: Hrag Najarian
+Date: June 2023
+'''
+
+
+# In[ ]:
+
+
 # Run this command on the command line to create a .py script instead of .ipynb
 	# jupyter nbconvert extract_variable.ipynb --to python
 
@@ -94,7 +103,7 @@ import sys
 
 ##############################################################################
 
-def extract_variable(input_file, variable_name, output_dir):
+def extract_variable(input_file, variable_name, output_dir, file_name):
     # Open the input netCDF file
 	dataset = nc.Dataset(input_file, 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
 
@@ -105,7 +114,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		# Pressure
 		if i == 'P':
 			# Create new .nc file we can write to and name it appropriately
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_P', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_P', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions based on global dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -123,7 +132,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		# Zonal Wind
 		elif i == 'U':
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_U', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_U', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -145,7 +154,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		# Meridional Wind
 		elif i == 'V':
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_V', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_V', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -168,7 +177,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QV':
 			variable = dataset.variables['QVAPOR']    # Water vapor mixing ratio [kg/kg]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QV', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QV', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -184,7 +193,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QC':
 			variable = dataset.variables['QCLOUD']    # Cloud water mixing ratio [kg/kg]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -200,7 +209,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QR':
 			variable = dataset.variables['QRAIN']    # Rain water mixing ratio [kg/kg]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QR', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QR', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -216,7 +225,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QI':
 			variable = dataset.variables['QICE']    # Ice mixing ratio [kg/kg]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QI', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QI', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -232,7 +241,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QS':
 			variable = dataset.variables['QSNOW']    # Snow mixing ratio [kg/kg]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QS', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QS', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -248,7 +257,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QG':
 			variable = dataset.variables['QGRAUP']    # Graupel mixing ratio [kg/kg]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QG', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QG', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -264,7 +273,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'CLDFRA':
 			variable = dataset.variables['CLDFRA']    # Cloud Fraction
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CLDFRA', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_CLDFRA', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -282,7 +291,7 @@ def extract_variable(input_file, variable_name, output_dir):
 							# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
 			variable = dataset.variables['T']    # Potential Temperature [K]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_Theta', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_Theta', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -298,7 +307,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'H_DIABATIC':
 			variable = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_H_DIABATIC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_H_DIABATIC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -314,7 +323,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'CAPE_CIN_3D':
 			variable = dataset.variables['CAPE_CIN']    # Latent Heating [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CAPE_CIN', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_CAPE_CIN', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -333,7 +342,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWClear':
 			variable = dataset.variables['RTHRATSWC']    # SW Radiative heating CLEAR SKY [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWClear', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWClear', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -349,7 +358,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWAll':
 			variable = dataset.variables['RTHRATSW']    # SW Radiative heating CLEAR SKY [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWAll', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWAll', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -365,7 +374,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWClear':
 			variable = dataset.variables['RTHRATLWC']    # LW Radiative heating CLEAR SKY [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWClear', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWClear', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -381,7 +390,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWAll':
 			variable = dataset.variables['RTHRATLW']    # LW Radiative heating ALL SKY [K/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWAll', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWAll', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
@@ -402,7 +411,7 @@ def extract_variable(input_file, variable_name, output_dir):
 			# Append the first timestep to rain rate (all zeros) to keep the same shape
 			variable = np.ma.append(np.expand_dims(R_accum[0], axis=0), RR, axis=0)
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_RR', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_RR', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -419,7 +428,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'HFX':
 			variable = dataset.variables['HFX']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_HFX', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_HFX', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -435,7 +444,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'QFX':
 			variable = dataset.variables['QFX']	# [kg/(m^2s^1)]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_QFX', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_QFX', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -451,7 +460,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LH':
 			variable = dataset.variables['LH']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LH', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LH', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -467,7 +476,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'T2':
 			variable = dataset.variables['T2']	# [K]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_T2', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_T2', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -483,7 +492,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'U10':
 			variable = dataset.variables['U10']	# [m/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_U10', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_U10', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -499,7 +508,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'V10':
 			variable = dataset.variables['V10']	# [m/s]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_V10', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_V10', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -515,7 +524,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'PSFC':
 			variable = dataset.variables['PSFC']	# [Pa]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_PSFC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_PSFC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -532,7 +541,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'HGT':
 			variable = dataset.variables['HGT']	# [m]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_HGT', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_HGT', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -547,7 +556,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		# CAPE 2-D space [J/kg]
 		elif i == 'CAPE':
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CAPE', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_CAPE', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -565,7 +574,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		# CIN 2-D space [J/kg]
 		elif i == 'CIN':
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_CIN', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_CIN', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -588,7 +597,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWUPT':
 			variable = dataset.variables['LWUPT']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWUPT', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWUPT', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -604,7 +613,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWDNT':
 			variable = dataset.variables['LWDNT']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWDNT', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWDNT', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -620,7 +629,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWUPB':
 			variable = dataset.variables['LWUPB']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWUPB', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWUPB', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -636,7 +645,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWDNB':
 			variable = dataset.variables['LWDNB']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWDNB', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWDNB', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -652,7 +661,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWUPT':
 			variable = dataset.variables['SWUPT']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWUPT', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWUPT', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -668,7 +677,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWDNT':
 			variable = dataset.variables['SWDNT']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWDNT', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWDNT', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -684,7 +693,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWUPB':
 			variable = dataset.variables['SWUPB']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWUPB', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWUPB', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -700,7 +709,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWDNB':
 			variable = dataset.variables['SWDNB']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWDNB', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWDNB', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -716,7 +725,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWUPTC':
 			variable = dataset.variables['LWUPTC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWUPTC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWUPTC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -732,7 +741,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWDNTC':
 			variable = dataset.variables['LWDNTC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWDNTC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWDNTC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -748,7 +757,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWUPBC':
 			variable = dataset.variables['LWUPBC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWUPBC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWUPBC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -764,7 +773,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'LWDNBC':
 			variable = dataset.variables['LWDNBC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_LWDNBC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_LWDNBC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -780,7 +789,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWUPTC':
 			variable = dataset.variables['SWUPTC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWUPTC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWUPTC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -796,7 +805,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWDNTC':
 			variable = dataset.variables['SWDNTC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWDNTC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWDNTC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -812,7 +821,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWUPBC':
 			variable = dataset.variables['SWUPBC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWUPBC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWUPBC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -828,7 +837,7 @@ def extract_variable(input_file, variable_name, output_dir):
 		elif i == 'SWDNBC':
 			variable = dataset.variables['SWDNBC']	# [W/m^2]
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + input_file[-3:] + '_SWDNBC', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_SWDNBC', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -856,16 +865,22 @@ parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
 
 # Pick the raw folders:
-input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
-input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
+	# Control
+# raw_folder_d01 = '/raw/d01'
+# input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+	# CRF Off
+raw_folder_d02 = '/raw/d02_sunrise'
+input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['CAPE', 'CIN']
+variable_name = ['SWUPBC','SWDNBC','LWUPBC','LWDNBC']
 
 # Call on your function:
-extract_variable(input_file_d01, variable_name, output_dir)
-extract_variable(input_file_d02, variable_name, output_dir)
+# extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
+extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
 
