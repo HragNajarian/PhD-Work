@@ -731,3 +731,11 @@ plots/cross/WRF_TS_Cross_Sumatra_NormalWind_d02_2015-12-03-05LT.png
 plots/cross/WRF_TS_Cross_Sumatra_NormalWind_d02_2015-12-03-06LT.png
 plots/cross/WRF_TS_Cross_Sumatra_NormalWind_d02_2015-12-03-07LT.png
 temp_plots/
+plots/DailyAvgDiff_NormalWind.png
+plots/DC_HFXandSWSFC.png
+plots/Domain_cross.png
+plots/NormDiff_QTotal.png
+plots/NormDiff_RR.pdf
+plots/NormDiff_RR.png
+plots/RR.pdf
+plots/RR.png
