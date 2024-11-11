@@ -394,7 +394,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 		######################################## 2-D Variables ########################################
 
 		# Rain Rate
-		elif (i == 'RR'):
+		elif i == 'RR':
 			if (input_file[-3:]=='d02' or input_file[-3:]=='d01'):
 				R_accum = dataset.variables['RAINNC']    # ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				RR = R_accum[1:] - R_accum[:-1]		     # Take the difference to make it rain rate per timestep [mm/dt]	
@@ -440,7 +440,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 				for dim_name, dim in dataset.dimensions.items():
 					output_dataset.createDimension(dim_name, len(dim))
 				# Create the variable, set attributes, and copy the variable into new file
-				output_variable = output_dataset.createVariable(i, variable.dtype, R_accum.dimensions)
+				output_variable = output_dataset.createVariable(i, 'f4', R_accum.dimensions)
 				temp_atts = R_accum.__dict__
 				temp_atts.update({'description':'Rain Rate', 'units':'mm/dt'})
 				output_variable.setncatts(temp_atts)
