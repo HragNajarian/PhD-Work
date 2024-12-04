@@ -1,14 +1,25 @@
-# %%
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
 '''
 Author: Hrag Najarian
 Date: June 2023
 '''
 
-# %%
+
+# In[ ]:
+
+
 # Run this command on the command line to create a .py script instead of .ipynb
 	# jupyter nbconvert extract_variable.ipynb --to python
 
-# %%
+
+# In[2]:
+
+
 # Purpose: Extract important variables from a stitched WRFout file and 
         # create a variable specific .nc file from it.
 
@@ -98,8 +109,10 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 
 	for i in variable_name:
 
+		##############################################################################################
 		######################################## 3-D Variables #######################################
-		
+		##############################################################################################
+
 		# Pressure
 		if i == 'P':
 			# Create new .nc file we can write to and name it appropriately
@@ -391,10 +404,12 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 				output_variable[t,...] = variable[t,...]
 			output_dataset.close()
 
+		###############################################################################################
 		######################################## 2-D Variables ########################################
-
+		###############################################################################################
+		
 		# Rain Rate
-		elif i == 'RR':
+		elif (i == 'RR'):
 			if (input_file[-3:]=='d02' or input_file[-3:]=='d01'):
 				R_accum = dataset.variables['RAINNC']    # ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				RR = R_accum[1:] - R_accum[:-1]		     # Take the difference to make it rain rate per timestep [mm/dt]	
@@ -407,17 +422,18 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 				for dim_name, dim in dataset.dimensions.items():
 					output_dataset.createDimension(dim_name, len(dim))
 				# Create the variable, set attributes, and copy the variable into new file
-				output_variable = output_dataset.createVariable(i, variable.dtype, R_accum.dimensions)
+				output_variable = output_dataset.createVariable(i, 'f4', R_accum.dimensions)
 				temp_atts = R_accum.__dict__
 				temp_atts.update({'description':'Rain Rate', 'units':'mm/dt'})
 				output_variable.setncatts(temp_atts)
 				output_variable[:] = variable[:]	# not a large variable so no need to loop
 				output_dataset.close()
 
-			else:	# You are most likely looking at a concatenated ensemble of simulations from restart files
+			# You are most likely looking at a concatenated ensemble of simulations from restart files
+			elif (input_file[-3:]=='ise' or input_file[-3:]=='set'):# d02_sunr(ise) or d02_sun(set)
 				R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
-				# Load in the control data 
+					# Load in the control data 
 				cntl_file = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/raw/d02'
 				dataset_cntl = nc.Dataset(cntl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
 				R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
@@ -433,6 +449,53 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 				# Append zeros to the first timestep to rain rate to say the first timestep is zero
 				variable = np.ma.append(np.zeros((1,RR[0].shape[0],RR[0].shape[1])), RR, axis=0)
 				
+				# Create new .nc file
+				output_dataset = nc.Dataset(output_dir + file_name + '_RR', 'w', clobber=True)
+				output_dataset.setncatts(dataset.__dict__)
+				# Create dimensions in the output file
+				for dim_name, dim in dataset.dimensions.items():
+					output_dataset.createDimension(dim_name, len(dim))
+				# Create the variable, set attributes, and copy the variable into new file
+				output_variable = output_dataset.createVariable(i, 'f4', R_accum.dimensions)
+				temp_atts = R_accum.__dict__
+				temp_atts.update({'description':'Rain Rate', 'units':'mm/dt'})
+				output_variable.setncatts(temp_atts)
+				output_variable[:] = variable[:]	# not a large variable so no need to loop
+				output_dataset.close()
+				dataset_cntl.close()
+
+			# This file retains the entire simulation period
+			elif (input_file[-3:]=='ens' or input_file[-3:]=='set'):
+				R_accum = dataset.variables['RAINNC']				# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+				RR = R_accum[:,1:] - R_accum[:,:-1]					# Take the difference to make it rain rate [mm/dt]
+				## Make RR values at the start of each simulation the same as the control
+					# Load in the control data 
+				cntl_file = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/raw/d02'
+				dataset_cntl = nc.Dataset(cntl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+				R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+				# Find out the matching start times of the simulations with control
+				itter = 0
+				replacement_ind = []
+				for t in range(R_accum_cntl.shape[0]):	# Loop over time
+					# Does the cntl time and the first time step of the simulation match
+					match = np.where(dataset_cntl.variables['Times'][t] == dataset.variables['Times'][itter,0], True, False)
+					if np.all(match == True):
+						replacement_ind.append(t)	# Note the index if it matches
+						itter = itter + 1			# Go to the next simulation run
+					else:
+						continue					# Keep going
+					# Break loop once all simulation start indicies are accounted for
+					if itter == RR.shape[0]:
+						break
+				replacement_ind = np.array(replacement_ind)
+				# Find the rain rate of those timesteps/indices
+				RR_replacement = R_accum_cntl[replacement_ind] - R_accum_cntl[replacement_ind-1]
+				# Concat them to the start of the simulations
+				variable = np.concatenate((np.expand_dims(RR_replacement, axis=1), RR), axis=1, dtype=np.float32)
+
+				## Make RR values at the start of each simulation 0 mm/hr
+				# RR = np.append(np.zeros((RR.shape[0],1,RR.shape[2],RR.shape[3])), RR, axis=1)
+
 				# Create new .nc file
 				output_dataset = nc.Dataset(output_dir + file_name + '_RR', 'w', clobber=True)
 				output_dataset.setncatts(dataset.__dict__)
@@ -877,7 +940,10 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 	dataset.close()
 	return
 
-# %%
+
+# In[ ]:
+
+
 # Pick the main folder:
 # parent_dir = '/where/your/wrfoutfiles/exist'
 parent_dir = sys.argv[1]
@@ -892,17 +958,22 @@ parent_dir = sys.argv[1]
 # raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off
-raw_folder_d02 = '/raw/d02_sunrise'
+# raw_folder_d02 = '/raw/d02_sunrise'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+
+	# CRF Off Ensemble
+raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 # Output to level 1 directory:
-output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
+output_dir = parent_dir + '/L1_ens/'  # Path to the input netCDF file
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
 variable_name = ['RR']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
-extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
+# extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
 
 
+extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[9:])
