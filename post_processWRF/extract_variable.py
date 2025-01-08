@@ -958,22 +958,24 @@ parent_dir = sys.argv[1]
 # raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off
-# raw_folder_d02 = '/raw/d02_sunrise'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-
-	# CRF Off Ensemble
-raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
+raw_folder_d02 = '/raw/d02_sunrise'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
-# Output to level 1 directory:
-output_dir = parent_dir + '/L1_ens/'  # Path to the input netCDF file
+# 	# CRF Off Ensemble
+# raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+
+# Output to level 1 (L1) directory:
+output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
+# output_dir = parent_dir + '/L1_ens/'  # Path to the input netCDF file
+
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['RR']
+variable_name = ['LH']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
-# extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
+extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
 
 
-extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[9:])
+# extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[9:])
