@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --job-name=sig_test
+#SBATCH -p radclouds
+##SBATCH --dependency
+#SBATCH -N 1
+#SBATCH -n 56
+#SBATCH --nodelist=c874
+## c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+mamba init
+mamba activate WRF_Xarray
+python -u /home/hragnajarian/PhD/post_processWRF/sig_test_di_RR_range_diff.py
