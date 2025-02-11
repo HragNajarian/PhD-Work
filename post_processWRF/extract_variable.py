@@ -961,21 +961,70 @@ parent_dir = sys.argv[1]
 raw_folder_d02 = '/raw/d02_sunrise'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
-# 	# CRF Off Ensemble
+	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
-# Output to level 1 (L1) directory:
+# Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# output_dir = parent_dir + '/L1_ens/'  # Path to the input netCDF file
-
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['LH']
+variable_name = ['U10','V10']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
 extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
 
 
-# extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[9:])
+# In[4]:
+
+
+# import netCDF4 as nc
+# import numpy as np
+# import numpy.ma as ma
+# import wrf
+# import sys
+
+# # Control where icloud=1
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+
+# # Pick the raw folders:
+# 	# CRF Off
+# raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+
+# # Output to level 1 directory:
+# output_dir = parent_dir + '/L1_ens/'  # Path to the input netCDF file
+# # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['RR']
+# file_name=raw_folder_d02[9:]
+# i='RR'
+
+# dataset = nc.Dataset(input_file_d02, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+# R_accum = dataset.variables['RAINNC']				# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+# RR = R_accum[:,1:] - R_accum[:,:-1]					# Take the difference to make it rain rate [mm/dt]
+# ## Make RR values at the start of each simulation the same as the control
+# 	# Load in the control data 
+# cntl_file = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/raw/d02'
+# dataset_cntl = nc.Dataset(cntl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+# R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+
+# itter = 0
+# replacement_ind = []
+# for i in range(R_accum_cntl.shape[0]):	# Loop over time
+# 	# Does the cntl time and the first time step of the simulation match
+# 	match = np.where(dataset_cntl.variables['Times'][i] == dataset.variables['Times'][itter,0], True, False)
+# 	if np.all(match == True):
+# 		replacement_ind.append(i)	# Note the index if it matches
+# 		itter = itter + 1			# Go to the next simulation run
+# 	else:
+# 		continue					# Keep going
+# 	# Break loop once all simulation start indicies are accounted for
+# 	if itter == RR.shape[0]:
+# 		break
+# replacement_ind = np.array(replacement_ind)
+# # Find the rain rate of those timesteps/indices
+# RR_replacement = R_accum_cntl[replacement_ind] - R_accum_cntl[replacement_ind-1]
+# # Concat them to the start of the simulations
+# variable = np.concatenate((np.expand_dims(RR_replacement, axis=1), RR), axis=1, dtype=np.float32)
+
