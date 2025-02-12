@@ -51,6 +51,7 @@ Date: June 2023
 		# QFX == Upward Moisture Flux at Surface[kg/(m^2s^1)]
 		# LH == Latent Heat Flux at Surface		[W/m^2]
 		# T2 == Temperature at 2m 				[K]
+		# Q2 == Water vapor mixing ratio at 2m	[kg/kg]
 		# U10 == Zonal wind at 10m 				[m/s]
 		# V10 == Meridonal wind at 10m 			[m/s]
 		# PSFC == Pressure at surface 			[hPa]
@@ -574,6 +575,22 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 			output_variable.setncatts(temp_atts)
 			output_variable[:] = variable[:]	# not a large variable so no need to loop
 			output_dataset.close()
+
+		# Surface water vapor (@ 2 meters)
+		elif i == 'Q2':
+			variable = dataset.variables['Q2']	# [kg/kg]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_Q2', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
 		
 		# Surface Zonal Wind (@ 10 meters)
 		elif i == 'U10':
@@ -950,16 +967,18 @@ parent_dir = sys.argv[1]
 
 # Control where icloud=1
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+# NCRF where icloud=0
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
 
 # Pick the raw folders:
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-	# CRF Off
-raw_folder_d02 = '/raw/d02_sunrise'
+raw_folder_d02 = '/raw/d02'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+# 	# CRF Off
+# raw_folder_d02 = '/raw/d02_sunrise'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
@@ -967,9 +986,9 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['U10','V10']
+# Declare variables needed: 'P', 'U', 'V', 'Q2', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'Q2' 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['Q2']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
