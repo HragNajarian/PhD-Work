@@ -50,6 +50,7 @@ Date: June 2023
         # HFX == Upward Heat Flux at Surface	[W/m^2]
 		# QFX == Upward Moisture Flux at Surface[kg/(m^2s^1)]
 		# LH == Latent Heat Flux at Surface		[W/m^2]
+		# TSK == Surface Skin Temperature		[K]
 		# T2 == Temperature at 2m 				[K]
 		# Q2 == Water vapor mixing ratio at 2m	[kg/kg]
 		# U10 == Zonal wind at 10m 				[m/s]
@@ -560,6 +561,22 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 			output_variable[:] = variable[:]	# not a large variable so no need to loop
 			output_dataset.close()
 
+		# Surface Skin Temperature (@ Surface)
+		elif i == 'TSK':
+			variable = dataset.variables['TSK']	# [K]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_TSK', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
 		# Surface temperature (@ 2 meters)
 		elif i == 'T2':
 			variable = dataset.variables['T2']	# [K]
@@ -986,9 +1003,9 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'Q2', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'Q2' 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['Q2']
+# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['TSK']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
