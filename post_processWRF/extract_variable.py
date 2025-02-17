@@ -991,11 +991,11 @@ parent_dir = sys.argv[1]
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
-raw_folder_d02 = '/raw/d02'
-input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-# 	# CRF Off
-# raw_folder_d02 = '/raw/d02_sunrise'
+# raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+	# CRF Off
+raw_folder_d02 = '/raw/d02_sunrise'
+input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
