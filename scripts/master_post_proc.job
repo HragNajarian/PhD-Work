@@ -48,10 +48,10 @@ for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loo
 	echo "This is the counter: ${counter}"
 	echo "This is the current processing directory: ${dir}"
 
-	# # Extract job -> Cross job
-	# 	# Step 1, run run_extract.job and capture the JobID
-	# export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
-	# echo "extract Job ID: ${job_run_extract_id}"
+	# Extract job -> Cross job
+		# Step 1, run run_extract.job and capture the JobID
+	export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
+	echo "extract Job ID: ${job_run_extract_id}"
 
 
 	# # Interp job -> Cross job
@@ -64,9 +64,9 @@ for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loo
 	# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 	# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 
-	# Step 3, run run_cross_section.job and capture the JobID
-	export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" "$dir"|tr -d -c 0-9)
-	echo "cross Job ID: ${job_run_cross_section_id}"
+	# # Step 3, run run_cross_section.job and capture the JobID
+	# export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" "$dir"|tr -d -c 0-9)
+	# echo "cross Job ID: ${job_run_cross_section_id}"
 
 	# Advance the counter so that the if else fi statement works
 	((counter++))
