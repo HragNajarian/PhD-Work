@@ -58,6 +58,7 @@ Date: June 2023
 		# V10 == Meridonal wind at 10m 					[m/s]
 		# PSFC == Pressure at surface 					[hPa]
 		# HGT == Terrain Height							[m]
+		# VEGFRA == Vegetation Fraction
 		# CAPE_CIN_2D == CAPE and CIN calculation		[J/kg]
 			# All sky
 		# LWUPT == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP ,		[W/m^2]
@@ -694,6 +695,22 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 			output_variable[:] = variable[:]	# not a large variable so no need to loop
 			output_dataset.close()
 
+		# Vegetation Fraction
+		elif i == 'VEGFRA':
+			variable = dataset.variables['VEGFRA']
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_VEGFRA', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
 		# CAPE 2-D space [J/kg]
 		elif i == 'CAPE':
 			# Create new .nc file
@@ -1011,11 +1028,11 @@ parent_dir = sys.argv[1]
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
-raw_folder_d02 = '/raw/d02'
-input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-# 	# CRF Off
-# raw_folder_d02 = '/raw/d02_sunrise'
+# raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+	# CRF Off
+raw_folder_d02 = '/raw/d02_sunrise'
+input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
@@ -1023,9 +1040,9 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['SMOIS']
+# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['VEGFRA', 'QFX']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
@@ -1034,8 +1051,6 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 
 # In[ ]:
 
-
-# Testing Cell
 
 # import netCDF4 as nc
 # import numpy as np
@@ -1055,4 +1070,17 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 # # Open the input netCDF file
 # dataset = nc.Dataset(input_file, 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
 
+# variable = dataset.variables['SMOIS'][:,0,:,:]	# [m^3/m^3]	# Pick the first layer, hence the [:,0,:,:]	== [Time, soil_layers_stag, south_north, west east]
+# # Create new .nc file
+# output_dataset = nc.Dataset(output_dir + file_name + '_SMOIS', 'w', clobber=True)
+# output_dataset.setncatts(dataset.__dict__)
+# # Create dimensions in the output file
+# for dim_name, dim in dataset.dimensions.items():
+# 	output_dataset.createDimension(dim_name, len(dim))
+# # Create the variable, set attributes, and copy the variable into new file
+# output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+# temp_atts = variable.__dict__
+# output_variable.setncatts(temp_atts)
+# output_variable[:] = variable[:]	# not a large variable so no need to loop
+# output_dataset.close()
 
