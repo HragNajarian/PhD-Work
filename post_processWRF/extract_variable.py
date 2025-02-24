@@ -46,36 +46,37 @@ Date: June 2023
 		# RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
 		# RTHRATLW == LW Radiative heating 				[K/s]
 			# 2D variables
-        # RR == Rain rate 						[mm/dt], where dt is your timestep
-        # HFX == Upward Heat Flux at Surface	[W/m^2]
-		# QFX == Upward Moisture Flux at Surface[kg/(m^2s^1)]
-		# LH == Latent Heat Flux at Surface		[W/m^2]
-		# TSK == Surface Skin Temperature		[K]
-		# T2 == Temperature at 2m 				[K]
-		# Q2 == Water vapor mixing ratio at 2m	[kg/kg]
-		# U10 == Zonal wind at 10m 				[m/s]
-		# V10 == Meridonal wind at 10m 			[m/s]
-		# PSFC == Pressure at surface 			[hPa]
-		# HGT == Terrain Height					[m]
+        # RR == Rain rate 								[mm/dt], where dt is your timestep
+        # HFX == Upward Heat Flux at Surface			[W/m^2]
+		# QFX == Upward Moisture Flux at Surface		[kg/(m^2s^1)]
+		# LH == Latent Heat Flux at Surface				[W/m^2]
+		# SMOIS == Surface Soil Moisture				[m^3/m^3]
+		# TSK == Surface Skin Temperature				[K]
+		# T2 == Temperature at 2m 						[K]
+		# Q2 == Water vapor mixing ratio at 2m			[kg/kg]
+		# U10 == Zonal wind at 10m 						[m/s]
+		# V10 == Meridonal wind at 10m 					[m/s]
+		# PSFC == Pressure at surface 					[hPa]
+		# HGT == Terrain Height							[m]
 		# CAPE_CIN_2D == CAPE and CIN calculation		[J/kg]
 			# All sky
-		# LWUPT == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP , [W/m^2]
-		# LWDNT == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP , [W/m^2]
-		# LWUPB == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM , [W/m^2]
-		# LWDNB == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT BOTTOM , [W/m^2]
-		# SWUPT == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT TOP , [W/m^2]
-		# SWDNT == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT TOP , [W/m^2]
-		# SWUPB == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM , [W/m^2]
+		# LWUPT == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP ,		[W/m^2]
+		# LWDNT == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP ,		[W/m^2]
+		# LWUPB == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM ,	[W/m^2]
+		# LWDNB == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT BOTTOM ,	[W/m^2]
+		# SWUPT == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT TOP , 		[W/m^2]
+		# SWDNT == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT TOP , 	[W/m^2]
+		# SWUPB == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM , 	[W/m^2]
 		# SWDNB == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT BOTTOM , [W/m^2]
 			# Clear sky
-		# LWUPTC == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP CLEAR, [W/m^2]
-		# LWDNTC == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP CLEAR, [W/m^2]
-		# LWUPBC == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM CLEAR, [W/m^2]
-		# LWDNBC == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT BOTTOM CLEAR, [W/m^2]
-		# SWUPTC == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT TOP CLEAR, [W/m^2]
-		# SWDNTC == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT TOP CLEAR, [W/m^2]
-		# SWUPBC == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM CLEAR, [W/m^2]
-		# SWDNBC == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT BOTTOM CLEAR, [W/m^2]
+		# LWUPTC == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP CLEAR, 		[W/m^2]
+		# LWDNTC == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP CLEAR, 		[W/m^2]
+		# LWUPBC == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM CLEAR, 		[W/m^2]
+		# LWDNBC == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT BOTTOM CLEAR, 	[W/m^2]
+		# SWUPTC == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT TOP CLEAR, 		[W/m^2]
+		# SWDNTC == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT TOP CLEAR, 		[W/m^2]
+		# SWUPBC == INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM CLEAR, 	[W/m^2]
+		# SWDNBC == INSTANTANEOUS DOWNWELLING SHORTWAVE FLUX AT BOTTOM CLEAR, 	[W/m^2]
     # output_dir: The path to a directory where you'd like the new .nc files to be located
 # Output:
     # .nc files for specific variables
@@ -561,6 +562,25 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 			output_variable[:] = variable[:]	# not a large variable so no need to loop
 			output_dataset.close()
 
+		# Soil Moisture		[m^3/m^3]		# Adjusted to output the layer closest to the surface
+		elif i == 'SMOIS':
+			variable = dataset.variables['SMOIS'][:,0,:,:]	# [m^3/m^3]	# Pick the first layer, hence the [:,0,:,:]	== [Time, soil_layers_stag, south_north, west east]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_SMOIS', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			temp_dimensions = list(dataset.variables['SMOIS'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+			temp_dimensions.remove("soil_layers_stag")
+			temp_dimensions = tuple(temp_dimensions)
+			output_variable = output_dataset.createVariable(i, variable.dtype, temp_dimensions)
+			temp_atts = dataset.variables['SMOIS'].__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
 		# Surface Skin Temperature (@ Surface)
 		elif i == 'TSK':
 			variable = dataset.variables['TSK']	# [K]
@@ -991,11 +1011,11 @@ parent_dir = sys.argv[1]
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-	# CRF Off
-raw_folder_d02 = '/raw/d02_sunrise'
+raw_folder_d02 = '/raw/d02'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+# 	# CRF Off
+# raw_folder_d02 = '/raw/d02_sunrise'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
@@ -1003,17 +1023,19 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 
 # Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['TSK']
+# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['SMOIS']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
 extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
 
 
-# In[4]:
+# In[ ]:
 
+
+# Testing Cell
 
 # import netCDF4 as nc
 # import numpy as np
@@ -1021,46 +1043,16 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 # import wrf
 # import sys
 
-# # Control where icloud=1
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
-
-# # Pick the raw folders:
-# 	# CRF Off
-# raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+# raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+# input_file = input_file_d02
+# output_dir = parent_dir + '/L1/'
+# variable_name = ['SMOIS']
+# i=variable_name[0]
+# file_name=raw_folder_d02[5:]
 
-# # Output to level 1 directory:
-# output_dir = parent_dir + '/L1_ens/'  # Path to the input netCDF file
-# # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['RR']
-# file_name=raw_folder_d02[9:]
-# i='RR'
+# # Open the input netCDF file
+# dataset = nc.Dataset(input_file, 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
 
-# dataset = nc.Dataset(input_file_d02, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
-# R_accum = dataset.variables['RAINNC']				# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
-# RR = R_accum[:,1:] - R_accum[:,:-1]					# Take the difference to make it rain rate [mm/dt]
-# ## Make RR values at the start of each simulation the same as the control
-# 	# Load in the control data 
-# cntl_file = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/raw/d02'
-# dataset_cntl = nc.Dataset(cntl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
-# R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
-
-# itter = 0
-# replacement_ind = []
-# for i in range(R_accum_cntl.shape[0]):	# Loop over time
-# 	# Does the cntl time and the first time step of the simulation match
-# 	match = np.where(dataset_cntl.variables['Times'][i] == dataset.variables['Times'][itter,0], True, False)
-# 	if np.all(match == True):
-# 		replacement_ind.append(i)	# Note the index if it matches
-# 		itter = itter + 1			# Go to the next simulation run
-# 	else:
-# 		continue					# Keep going
-# 	# Break loop once all simulation start indicies are accounted for
-# 	if itter == RR.shape[0]:
-# 		break
-# replacement_ind = np.array(replacement_ind)
-# # Find the rain rate of those timesteps/indices
-# RR_replacement = R_accum_cntl[replacement_ind] - R_accum_cntl[replacement_ind-1]
-# # Concat them to the start of the simulations
-# variable = np.concatenate((np.expand_dims(RR_replacement, axis=1), RR), axis=1, dtype=np.float32)
 
