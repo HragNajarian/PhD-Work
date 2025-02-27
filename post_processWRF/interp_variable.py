@@ -530,33 +530,115 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
 # In[ ]:
 
 
-## Pick the main folder:
-# parent_dir = '/where/your/wrfoutfiles/exist'
-parent_dir = sys.argv[1]
+# ## Pick the main folder:
+# # parent_dir = '/where/your/wrfoutfiles/exist'
+# parent_dir = sys.argv[1]
 
-# Pick the raw folders:
-# input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
-# input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
-raw_folder_d02 = '/raw/d02_sunrise'
-input_file_d02 = parent_dir + raw_folder_d02
+# # Pick the raw folders:
+# # input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
+# # input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02_sunrise'
+# input_file_d02 = parent_dir + raw_folder_d02
 
-# Where does your 3-D pressure file live
-# pressure_file_d01 = parent_dir + '/L1/d01_P'
-# pressure_file_d02 = parent_dir + '/L1/d02_P'
+# # Where does your 3-D pressure file live
+# # pressure_file_d01 = parent_dir + '/L1/d01_P'
+# # pressure_file_d02 = parent_dir + '/L1/d02_P'
+# pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
 
-pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
+
+# # Output to level 2 directory:
+# output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
+# # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
+# # variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+# variable_name = ['QV', 'QC', 'QR', 'QI', 'QS', 'QG']
+
+# # Declare the vertial levels you want to interpolate:
+# # vertical_levels = np.array(1000)
+# # vertical_levels = np.arange(1000,0,-50)
+# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+
+# # interp_variable(input_file_d01, pressure_file_d01, variable_name, output_dir, vertical_levels)
+# # interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels, file_name=raw_folder_d02[5:])
 
 
-# Output to level 2 directory:
-output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
-# Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
-# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-variable_name = ['QV', 'QC', 'QR', 'QI', 'QS', 'QG']
+# In[ ]:
 
-# Declare the vertial levels you want to interpolate:
-# vertical_levels = np.array(1000)
-# vertical_levels = np.arange(1000,0,-50)
+
+# Declare vertical levels that you've used when interpolating
 vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
-# interp_variable(input_file_d01, pressure_file_d01, variable_name, output_dir, vertical_levels)
-interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels, file_name=raw_folder_d02[5:])
 
+	# Control where icloud=1
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+# raw_folder_d02 = '/L2/d02_interp_CLDFRA'
+# file_name = 'd02'
+	# NCRF where icloud=0
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
+file_name = 'd02_sunrise'
+
+output_dir = parent_dir + '/L1/'
+
+input_file_d02 = parent_dir + raw_folder_d02
+dataset = nc.Dataset(input_file_d02, 'r')
+# Assign the variable
+main_variable = dataset.variables['CLDFRA']
+
+
+print('Starting fractions')
+
+# Low Cloud Fraction [1000-700 hPa]
+variable = np.nanmean(main_variable[:,(vertical_levels>700),...], axis=1)	# nanmean over the vertical levels
+variable = np.where(variable>1, np.nan, variable)	# Turn the fill value into nan's before averaging
+# Create new .nc file
+output_dataset = nc.Dataset(output_dir + file_name + '_LowCLDFRA', 'w', clobber=True)
+output_dataset.setncatts(dataset.__dict__)
+# Create the dimensions
+for dim_name, dim in dataset.dimensions.items():
+	output_dataset.createDimension(dim_name, len(dim))
+# Create the variable, set attributes, and copy the variable into the new nc file
+temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+temp_dimensions.remove("bottom_top")
+temp_dimensions = tuple(temp_dimensions)
+output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
+output_variable[:] = variable[:]	# not a large variable so no need to loop
+output_dataset.close()
+
+print('Low cloud fraction uploaded')
+
+# Mid Cloud Fraction [700-450 hPa]
+variable = np.nanmean(main_variable[:,((vertical_levels<=700) & (vertical_levels>450)),...], axis=1)	# nanmean over the vertical levels
+variable = np.where(variable>1, np.nan, variable)	# Turn the fill value into nan's before averaging
+# Create new .nc file
+output_dataset = nc.Dataset(output_dir + file_name + '_MidCLDFRA', 'w', clobber=True)
+output_dataset.setncatts(dataset.__dict__)
+# Create the dimensions
+for dim_name, dim in dataset.dimensions.items():
+	output_dataset.createDimension(dim_name, len(dim))
+# Create the variable, set attributes, and copy the variable into the new nc file
+temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+temp_dimensions.remove("bottom_top")
+temp_dimensions = tuple(temp_dimensions)
+output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
+output_variable[:] = variable[:]	# not a large variable so no need to loop
+output_dataset.close()
+
+print('Mid cloud fraction uploaded')
+
+# High Cloud Fraction [450-200 hPa]
+variable = np.nanmean(main_variable[:,((vertical_levels<=450) & (vertical_levels>=200)),...], axis=1)	# nanmean over the vertical levels
+variable = np.where(variable>1, np.nan, variable)	# Turn the fill value into nan's before averaging
+# Create new .nc file
+output_dataset = nc.Dataset(output_dir + file_name + '_HighCLDFRA', 'w', clobber=True)
+output_dataset.setncatts(dataset.__dict__)
+# Create the dimensions
+for dim_name, dim in dataset.dimensions.items():
+	output_dataset.createDimension(dim_name, len(dim))
+# Create the variable, set attributes, and copy the variable into the new nc file
+temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+temp_dimensions.remove("bottom_top")
+temp_dimensions = tuple(temp_dimensions)
+output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
+output_variable[:] = variable[:]	# not a large variable so no need to loop
+output_dataset.close()
+
+print('High cloud fraction uploaded')
