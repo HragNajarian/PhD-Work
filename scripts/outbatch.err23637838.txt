@@ -1,4 +1,0 @@
-Run 'mamba init' to be able to run mamba activate/deactivate
-and start a new shell session. Or use conda to activate/deactivate.
-
-slurmstepd: error: *** JOB 23637838 ON c875 CANCELLED AT 2025-02-26T19:11:49 ***
