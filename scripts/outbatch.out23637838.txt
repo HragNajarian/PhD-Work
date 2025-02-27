@@ -1,0 +1,20 @@
+no change     /opt/oscer/software/Mamba/23.1.0-4/condabin/conda
+no change     /opt/oscer/software/Mamba/23.1.0-4/bin/conda
+no change     /opt/oscer/software/Mamba/23.1.0-4/bin/conda-env
+no change     /opt/oscer/software/Mamba/23.1.0-4/bin/activate
+no change     /opt/oscer/software/Mamba/23.1.0-4/bin/deactivate
+no change     /opt/oscer/software/Mamba/23.1.0-4/etc/profile.d/conda.sh
+no change     /opt/oscer/software/Mamba/23.1.0-4/etc/fish/conf.d/conda.fish
+no change     /opt/oscer/software/Mamba/23.1.0-4/shell/condabin/Conda.psm1
+no change     /opt/oscer/software/Mamba/23.1.0-4/shell/condabin/conda-hook.ps1
+no change     /opt/oscer/software/Mamba/23.1.0-4/lib/python3.10/site-packages/xontrib/conda.xsh
+no change     /opt/oscer/software/Mamba/23.1.0-4/etc/profile.d/conda.csh
+modified      /home/hragnajarian/.bashrc
+
+==> For changes to take effect, close and re-open your current shell. <==
+
+Added mamba to /home/hragnajarian/.bashrc
+
+==> For changes to take effect, close and re-open your current shell. <==
+
+Low cloud fraction uploaded
