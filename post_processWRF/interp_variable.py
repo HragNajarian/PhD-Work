@@ -527,7 +527,7 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
     return
 
 
-# In[ ]:
+# In[3]:
 
 
 # ## Pick the main folder:
@@ -561,7 +561,56 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
 # # interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels, file_name=raw_folder_d02[5:])
 
 
-# In[43]:
+# In[59]:
+
+
+# # Function to layer weighted average cloud fraction due to uneven vertical grid spacing.
+# def layer_weighted_average(ds_CLDFRA, lower_layer, upper_layer, vertical_levels):
+	
+# 	# Create a mask that include the layers between, turns np.arrays into a np.ma.array
+# 	mask = ((vertical_levels<=lower_layer)&(vertical_levels>=upper_layer))
+# 	# Isolate those layers
+# 	variable = np.array(ds_CLDFRA[:5,(mask),:,:])	# 2nd dimension must be the P/z dimension
+# 	# Remove values that are >1 (CLDFRA cannot be >1)
+# 	variable = np.where(variable>1, np.nan ,variable)
+# 	# Remove the upper layer
+# 	variable = variable[:,:-1,:,:]
+# 	# Calculate the pressure differences between layers
+# 	dp = np.array(np.diff(vertical_levels[mask], n=1, axis=0))
+# 	# Expand dp into the shape of variable
+# 	dp = dp.reshape((1,-1,1,1))
+# 	dp = np.broadcast_to(dp, variable.shape)
+# 	# Remove dp values if variable is nan at that pressure layer. This means np.nansum(dp, axis=1) is not constant over all grid points
+# 	dp = np.where(np.isnan(variable), np.nan, dp)
+# 	# Multiple the variable based on the pressure differences, then divide by the total pressure layer difference, and then sum over the P/z layer
+# 	variable = np.nansum((variable * dp), axis=1) / (np.nansum(dp, axis=1))
+# 	# Convert masked array into just array
+# 	variable = np.array(variable)
+
+# 	return variable, dp
+
+
+# # Declare vertical levels that you've used when interpolating
+# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+
+# 	# Control where icloud=1
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+# raw_folder_d02 = '/L2/d02_interp_CLDFRA'
+# file_name = 'd02'
+# 	# NCRF where icloud=0
+# # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# # raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
+# # file_name = 'd02_sunrise'
+
+# output_dir = parent_dir + '/L1/'
+
+# input_file_d02 = parent_dir + raw_folder_d02
+# dataset = nc.Dataset(input_file_d02, 'r')
+# # Assign the variable
+# ds_CLDFRA = dataset.variables['CLDFRA']
+
+
+# In[5]:
 
 
 # Function to layer weighted average cloud fraction due to uneven vertical grid spacing.
@@ -570,11 +619,20 @@ def layer_weighted_average(ds_CLDFRA, lower_layer, upper_layer, vertical_levels)
 	# Create a mask that include the layers between, turns np.arrays into a np.ma.array
 	mask = ((vertical_levels<=lower_layer)&(vertical_levels>=upper_layer))
 	# Isolate those layers
-	variable = np.array(ds_CLDFRA[:,(mask),...])	# 2nd dimension must be the P/z dimension
+	variable = np.array(ds_CLDFRA[:,(mask),:,:])	# 2nd dimension must be the P/z dimension
+	# Remove values that are >1 (CLDFRA cannot be >1)
+	variable = np.where(variable>1, np.nan ,variable)
+	# Remove the upper layer
+	variable = variable[:,:-1,:,:]
 	# Calculate the pressure differences between layers
 	dp = np.array(np.diff(vertical_levels[mask], n=1, axis=0))
+	# Expand dp into the shape of variable
+	dp = dp.reshape((1,-1,1,1))
+	dp = np.broadcast_to(dp, variable.shape)
+	# Remove dp values if variable is nan at that pressure layer. This means np.nansum(dp, axis=1) is not constant over all grid points
+	dp = np.where(np.isnan(variable), np.nan, dp)
 	# Multiple the variable based on the pressure differences, then divide by the total pressure layer difference, and then sum over the P/z layer
-	variable = np.nansum(((variable[:,:-1,...]*dp[np.newaxis, :, np.newaxis, np.newaxis])/dp[:-1].sum()), axis=1)
+	variable = np.nansum((variable * dp), axis=1) / (np.nansum(dp, axis=1))
 	# Convert masked array into just array
 	variable = np.array(variable)
 
@@ -584,20 +642,20 @@ def layer_weighted_average(ds_CLDFRA, lower_layer, upper_layer, vertical_levels)
 vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
 	# Control where icloud=1
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
-raw_folder_d02 = '/L2/d02_interp_CLDFRA'
-file_name = 'd02'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+# raw_folder_d02 = '/L2/d02_interp_CLDFRA'
+# file_name = 'd02'
 	# NCRF where icloud=0
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
-# raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
-# file_name = 'd02_sunrise'
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
+file_name = 'd02_sunrise'
 
 output_dir = parent_dir + '/L1/'
-
 input_file_d02 = parent_dir + raw_folder_d02
 dataset = nc.Dataset(input_file_d02, 'r')
 # Assign the variable
 ds_CLDFRA = dataset.variables['CLDFRA']
+
 
 ## Low Cloud Fraction [1000-700 hPa]
 variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=1000, upper_layer=680, vertical_levels=vertical_levels)
@@ -633,6 +691,7 @@ output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
 output_variable[:] = variable[:]	# not a large variable so no need to loop
 output_dataset.close()
 print('Mid cloud fraction uploaded')
+
 
 ## High Cloud Fraction [450-200 hPa]
 variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=440, upper_layer=150, vertical_levels=vertical_levels)
