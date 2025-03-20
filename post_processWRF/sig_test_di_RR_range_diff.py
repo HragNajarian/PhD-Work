@@ -24,7 +24,7 @@ import os
 import time
 # import netCDF4 as nc
 from math import cos, asin, sqrt, pi, atan, degrees
-# import scipy
+from scipy.stats import bootstrap
 # from scipy.optimize import curve_fit
 
 
@@ -217,9 +217,15 @@ step2_time = time.perf_counter()
 ds = open_ds(file_d02_RR,time_ind_d02,lat_ind_d02,lon_ind_d02)
 da_d02_RR = ds['RR'].compute()
 da_d02_RR = da_d02_RR.assign_coords(without_keys(d02_coords,'bottom_top'))
-
 step1_time = time.perf_counter()
 print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+############ Detection of land & water  ############
+step2_time = time.perf_counter()
+# d02
+da_d02_LANDMASK = ds_d02['LANDMASK'].sel(Time=slice(1)).compute().squeeze()   # Land = 1, Water = 0
+step1_time = time.perf_counter()
+print('Landmask loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
 
 ######################################################################################################################################################
@@ -295,8 +301,8 @@ step1_time = time.perf_counter()
 print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
 
-
-time_bound = ['2015-11-23T02','2015-12-01T15']	# Does not include Dec 2, ends at Dec 1, 23:00 local time
+# time_bound = ['2015-11-23T02','2015-12-01T15']	# Does not include Dec 2, ends at Dec 1, 23:00 local time
+time_bound = ['2015-11-23T02','2015-12-02T00']
 
 ## Select a slice of the times, and create a local time coordinate
 RR_sunrise = da_d02_sunrise_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy()
@@ -304,48 +310,157 @@ RR_sunrise = assign_LT_coord(RR_sunrise, dim_num=3)	# Create a local time coordi
 RR_cntl = da_d02_RR.sel(Time=slice(time_bound[0],time_bound[1])).copy()
 RR_cntl = assign_LT_coord(RR_cntl, dim_num=3)		# Create a local time coordinte
 
-## Number of itterations
-N = 500
-N_amplitude_RR_di_diff = np.zeros((N, RR_sunrise.shape[1], RR_sunrise.shape[2]))
-sig_bars = np.empty((2, RR_sunrise.shape[1], RR_sunrise.shape[2]))	# Significant bounds [low, high]
 
-for n in range(N):
-	## Create a random set of indices with repeats for the time dimension
-	rand_time_inds = np.random.randint(RR_sunrise.shape[0], size=RR_sunrise.shape[0])
 
-	## Select random time indices, then diurnally composite
-	RR_di_sunrise = xarray_reduce(RR_sunrise[rand_time_inds,...], 'LocalTime.hour', func='nanmean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False], fill_value=np.nan).transpose('hour','south_north','west_east')
-	RR_di_cntl = xarray_reduce(RR_cntl[rand_time_inds,...], 'LocalTime.hour', func='nanmean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False], fill_value=np.nan).transpose('hour','south_north','west_east')
 
-	## Find the amplitudes and their difference
-	amplitude_RR_di_cntl = RR_di_cntl.max(dim='hour', keep_attrs=True, skipna=None) - RR_di_cntl.min(dim='hour', keep_attrs=True, skipna=None)
-	amplitude_RR_di_sunrise = RR_di_sunrise.max(dim='hour', keep_attrs=True, skipna=None) - RR_di_sunrise.min(dim='hour', keep_attrs=True, skipna=None)
-	amplitude_RR_di_diff = amplitude_RR_di_sunrise - amplitude_RR_di_cntl
+# ## Number of itterations
+# N = 500
+# N_amplitude_RR_di_diff = np.zeros((N, RR_sunrise.shape[1], RR_sunrise.shape[2]))
+# sig_bars = np.empty((2, RR_sunrise.shape[1], RR_sunrise.shape[2]))	# Significant bounds [low, high]
 
-	N_amplitude_RR_di_diff[n,...] = amplitude_RR_di_diff
-	print(f'Iteration: {n}/{N}, Number of nan\'s: {np.sum(np.isnan(amplitude_RR_di_diff)).values}')
+# for n in range(N):
+# 	## Create a random set of indices with repeats for the time dimension
+# 	rand_time_inds = np.random.randint(RR_sunrise.shape[0], size=RR_sunrise.shape[0])
 
-## 95% condifence intervals
-N_amplitude_RR_di_diff = np.sort(N_amplitude_RR_di_diff, axis=0)
-sig_bars[0,...] = N_amplitude_RR_di_diff[int(np.floor(.025*(N-1)))]
-sig_bars[1,...] = N_amplitude_RR_di_diff[int(np.ceil(.975*(N-1)))]
+# 	## Select random time indices, then diurnally composite
+# 	RR_di_sunrise = xarray_reduce(RR_sunrise[rand_time_inds,...], 'LocalTime.hour', func='nanmean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False], fill_value=np.nan).transpose('hour','south_north','west_east')
+# 	RR_di_cntl = xarray_reduce(RR_cntl[rand_time_inds,...], 'LocalTime.hour', func='nanmean', dim='Time', expected_groups=(np.arange(0,24)), isbin=[False], fill_value=np.nan).transpose('hour','south_north','west_east')
 
-## Save as xarray.dataarray -> netcdf
-da_sig_bars = xr.DataArray(
-	data=sig_bars,
-	dims=['interval','south_north','west_east'],
+# 	## Find the amplitudes and their difference
+# 	amplitude_RR_di_cntl = RR_di_cntl.max(dim='hour', keep_attrs=True, skipna=None) - RR_di_cntl.min(dim='hour', keep_attrs=True, skipna=None)
+# 	amplitude_RR_di_sunrise = RR_di_sunrise.max(dim='hour', keep_attrs=True, skipna=None) - RR_di_sunrise.min(dim='hour', keep_attrs=True, skipna=None)
+# 	amplitude_RR_di_diff = amplitude_RR_di_sunrise - amplitude_RR_di_cntl
+
+# 	N_amplitude_RR_di_diff[n,...] = amplitude_RR_di_diff
+# 	print(f'Iteration: {n}/{N}, Number of nan\'s: {np.sum(np.isnan(amplitude_RR_di_diff)).values}')
+
+# ## 95% condifence intervals
+# N_amplitude_RR_di_diff = np.sort(N_amplitude_RR_di_diff, axis=0)
+# sig_bars[0,...] = N_amplitude_RR_di_diff[int(np.floor(.025*(N-1)))]
+# sig_bars[1,...] = N_amplitude_RR_di_diff[int(np.ceil(.975*(N-1)))]
+
+# ## Save as xarray.dataarray -> netcdf
+# da_sig_bars = xr.DataArray(
+# 	data=sig_bars,
+# 	dims=['interval','south_north','west_east'],
+# 	coords=dict(
+# 		interval=np.array([0.025,0.975]),
+# 		south_north=amplitude_RR_di_diff.coords['south_north'].values,
+# 		west_east=amplitude_RR_di_diff.coords['west_east'].values
+# 		),
+# 	attrs=dict(
+#         description="95% Confidence Intervals of the Spatial Diurnal Rain Rate Range Difference (NCRF-CNTL)",
+#         units="mm/hr"
+# 		),
+# 	name='RR_range_diff_sig_bars'
+# )
+
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# file_name = parent_dir + '/L4/RR_di_range_diff_sig'
+# da_sig_bars.to_netcdf(path=file_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+
+
+## Diurnal Composite of Domain Averaged Rain Rate
+
+# Define the statistic to calculate (e.g., mean)
+def mean_statistic(data):
+    return np.nanmean(data, axis=0)
+
+def bootstrap_di_composite(rain_rates, local_time, land_mask_3d, downselect_ratio, N):
+
+	sig_bars = np.empty((2, 24))	# Significant bounds
+	nbin = 0						# keeps track of the index of the bin through the loop
+
+	for i in range(24):
+		
+		# Extract data from a specfic local time
+		values = rain_rates[(local_time==i) & (land_mask_3d==True)]
+
+		# Downselect
+		values = np.random.choice(a=values, size=int(len(values)*downselect_ratio), replace=True)
+		
+		# Perform the bootstrap
+		result = bootstrap(
+			(values,),  # The data needs to be a tuple
+			statistic=mean_statistic,
+			confidence_level=0.95,	# 95% significance
+			n_resamples=N,  # Number of bootstrap samples
+			method='percentile',  # Use percentile method for CI
+			# random_state=42  # For reproducibility
+		)
+
+		sig_bars[0,nbin] = result.confidence_interval.low		# Lower 2.5% significance
+		sig_bars[1,nbin] = result.confidence_interval.high	# Upper 97.5% significance
+
+		# print(nbin)
+		nbin+=1
+	return sig_bars
+
+## Control
+# Assign data
+dataarray = RR_cntl.copy()
+rain_rates = dataarray.values						# Rain rate values
+land_mask_3d = np.repeat(np.expand_dims(da_d02_LANDMASK.values, axis=0), len(dataarray.Time), axis=0)
+local_time = dataarray.LocalTime.dt.hour.values		# Only look at hours
+N = 500				# Number of itterations
+downselect_ratio = 1	# Ratio of total data selected when sig testing
+# Net
+sig_bars_cntl_net = bootstrap_di_composite(rain_rates, local_time, (land_mask_3d==0)|(land_mask_3d==1), downselect_ratio, N)
+# Land
+sig_bars_cntl_land = bootstrap_di_composite(rain_rates, local_time, (land_mask_3d==1), downselect_ratio, N)
+# Ocean
+sig_bars_cntl_ocean = bootstrap_di_composite(rain_rates, local_time, land_mask_3d==0, downselect_ratio, N)
+
+## Sunrise
+# Assign data
+dataarray = RR_sunrise.copy()
+rain_rates = dataarray.values						# Rain rate values
+
+# Net
+sig_bars_sunrise_net = bootstrap_di_composite(rain_rates, local_time, (land_mask_3d==0)|(land_mask_3d==1), downselect_ratio, N)
+# Land
+sig_bars_sunrise_land = bootstrap_di_composite(rain_rates, local_time, (land_mask_3d==1), downselect_ratio, N)
+# Ocean
+sig_bars_sunrise_ocean = bootstrap_di_composite(rain_rates, local_time, land_mask_3d==0, downselect_ratio, N)
+
+## Save the significant bounds
+
+# Control
+file_name = parent_dir_CNTL + '/L4/RR_di_sig_bars_cntl'
+da_sig_bars_cntl = xr.DataArray(
+	data=np.stack((sig_bars_cntl_net,sig_bars_cntl_land,sig_bars_cntl_ocean),axis=2),
+	dims=['interval','hours','domain'],
 	coords=dict(
-		interval=np.array([0.025,0.975]),
-		south_north=amplitude_RR_di_diff.coords['south_north'].values,
-		west_east=amplitude_RR_di_diff.coords['west_east'].values
-		),
+		interval = ('interval', np.array([0.025,0.975])),
+		hours = ('hours', np.arange(0,24)),
+		domain = ('domain', np.array(['net','land','ocean']))
+	),
 	attrs=dict(
-        description="95% Confidence Intervals of the Spatial Diurnal Rain Rate Range Difference (NCRF-CNTL)",
-        units="mm/hr"
-		),
-	name='RR_range_diff_sig_bars'
+        description="95% Confidence Intervals of the Diurnal Composite of Rain Rate over varying domains",
+        units="mm/hr",
+		N_itterations=f"{N}",
+	),
+	name='RR_domain_avg_sig_bars'
 )
+# Save file
+da_sig_bars_cntl.to_netcdf(path=file_name, mode='w', format='NETCDF4', compute=True)
 
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
-file_name = parent_dir + '/L4/RR_di_range_diff_sig'
-da_sig_bars.to_netcdf(path=file_name, mode='w', format='NETCDF4', unlimited_dims='Time', compute=True)
+# NCRF
+file_name = parent_dir_NCRF + '/L4/RR_di_sig_bars_sunrise'
+da_sig_bars_sunrise = xr.DataArray(
+	data=np.stack((sig_bars_sunrise_net,sig_bars_sunrise_land,sig_bars_sunrise_ocean),axis=2),
+	dims=['interval','hours','domain'],
+	coords=dict(
+		interval = ('interval', np.array([0.025,0.975])),
+		hours = ('hours', np.arange(0,24)),
+		domain = ('domain', np.array(['net','land','ocean']))
+	),
+	attrs=dict(
+        description="95% Confidence Intervals of the Diurnal Composite of Rain Rate over varying domains",
+        units="mm/hr",
+		N_itterations=f"{N}",
+	),
+	name='RR_domain_avg_sig_bars'
+)
+# Save file
+da_sig_bars_sunrise.to_netcdf(path=file_name, mode='w', format='NETCDF4', compute=True)
