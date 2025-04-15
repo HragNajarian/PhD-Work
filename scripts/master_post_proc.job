@@ -3,8 +3,8 @@
 ##SBATCH --dependency=afterok:17468408
 #SBATCH -p radclouds
 #SBATCH -N 1
-#SBATCH -n 56
-#SBATCH --nodelist=c874
+#SBATCH -n 64
+#SBATCH --nodelist=c874,c875
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
@@ -24,34 +24,38 @@
 # export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" $1|tr -d -c 0-9)
 # echo "extract Job ID: ${job_run_extract_id}"
 
-# # Interpolate
+# Interpolate
 # sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_interp.job"
-# export job_run_interp_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_interp.job" $1|tr -d -c 0-9)
-# echo "interp Job ID: ${job_run_interp_id}"
+export job_run_interp_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_interp.job" $1|tr -d -c 0-9)
+echo "interp Job ID: ${job_run_interp_id}"
 
-# # Cross-section
-# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
-# export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
-# echo "cross Job ID: ${job_run_cross_section_id}"
+# Cross-section
+sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
+export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
+echo "cross Job ID: ${job_run_cross_section_id}"
 
+
+###################################################################################################################################
 ############ If you want to JUST run post-processing, uncomment the section below and comment out the previous section ############
+###################################################################################################################################
 
-# Declare the parent dir:
-	# This is where you would keep all the directories where the simulations directories are held.
-parent_dir=("/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff")
 
-# List all the directories that have been made via mkdir_and_subdirectories.py. Name option acts as a pattern recognizer
-directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -name "2015*" -type d | sort))
-# Declare a counter. This acts as a condition for batch_real.job.
-counter=0
-for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loops through directories)
-	echo "This is the counter: ${counter}"
-	echo "This is the current processing directory: ${dir}"
+# # Declare the parent dir:
+# 	# This is where you would keep all the directories where the simulations directories are held.
+# parent_dir=("/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff")
 
-	# Extract job -> Cross job
-		# Step 1, run run_extract.job and capture the JobID
-	export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
-	echo "extract Job ID: ${job_run_extract_id}"
+# # List all the directories that have been made via mkdir_and_subdirectories.py. Name option acts as a pattern recognizer
+# directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -name "2015*" -type d | sort))
+# # Declare a counter. This acts as a condition for batch_real.job.
+# counter=0
+# for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loops through directories)
+# 	echo "This is the counter: ${counter}"
+# 	echo "This is the current processing directory: ${dir}"
+
+# 	# Extract job -> Cross job
+# 		# Step 1, run run_extract.job and capture the JobID
+# 	export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
+# 	echo "extract Job ID: ${job_run_extract_id}"
 
 
 	# # Interp job -> Cross job
@@ -69,8 +73,8 @@ for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loo
 	# echo "cross Job ID: ${job_run_cross_section_id}"
 
 	# Advance the counter so that the if else fi statement works
-	((counter++))
-done
+# 	((counter++))
+# done
 
 
 

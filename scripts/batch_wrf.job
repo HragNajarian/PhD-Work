@@ -12,6 +12,7 @@
 
 # Notes
 	# 10.5 day simulation with 4x daily restart file output at d01 500x400 d02 1300x1000, w/ 55 vertical layers took 51hrs running with 6 nodes
+	
 module purge
 source bashrc_wrf
 

@@ -10,6 +10,8 @@
 #SBATCH --error=outbatch.err%j.txt
 #SBATCH -t 24:00:00 # max job run time HH:MM:SS
 
+# Updates namelist.input in the WRF/run directory ($2),
+	# with the one made in the data storage directory ($1)
 cp $1 $2	# Update the namelist.input
 
 module purge

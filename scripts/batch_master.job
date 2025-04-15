@@ -8,11 +8,19 @@
 #SBATCH --error=outbatch.err%j.txt
 #SBATCH -t 1:00:00 # max job run time HH:MM:SS
 
+# This script run an ensemble of WRF simulations
+	# 1) Run batch_real
+	# 2) Run batch_wrf
+	# 3) Run post processing
+	# 4) Repeat...
+
 # This .job shall be located within the WRF/run directory.
-# Make sure the restart files are in the WRF/run directory if you are using restart files.
+# If you are using restart files, make sure the restart files are in the WRF/run directory.
+
 # Declare the parent dir:
 	# This is where you would keep all the directories where the simulations will be held.
-parent_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff"
+parent_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff"
+
 # Declare the WRF/run dir:
 wrf_run_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfstuff/WRF/run"
 
@@ -46,8 +54,8 @@ for dir in "${directories[@]}"; do	# This is a for-loop with array elements (loo
 
 	# Step 5, set a dependency for master_post_proc.job where it only runs once batch_wrf.job is completed.
 	sed -i "0,/--dependency/s/--dependency.*/--dependency=afterok:${job_wrf_id}/" "/home/hragnajarian/PhD/scripts/master_post_proc.job"
-		# starting at the beginning of the .job file, find the first match of the keyword ("0,/--dependency/)
-		# subsitute that keyword + what's ahead of it (s/--dependency.*/) with the subsitution (--dependency=afterok:${job_wrf_id}/")
+		# Since there are multiple "--dependency" strings in master_post_proc.job, starting at the beginning of the .job file, find the first match of the keyword ("0,/--dependency/)
+		# Then subsitute that keyword + what's ahead of it (s/--dependency.*/) with the subsitution(s/) (--dependency=afterok:${job_wrf_id}/")
 	# Step 6, run master_post_proc.job and capture the JobID
 	export job_post_proc_id=$(sbatch "/home/hragnajarian/PhD/scripts/master_post_proc.job" "$dir"|tr -d -c 0-9)
 	echo "Batch post processing ID: ${job_post_proc_id}"
