@@ -101,7 +101,6 @@ Date: June 2023
 
 import netCDF4 as nc
 import numpy as np
-import numpy.ma as ma
 import wrf
 import sys
 
@@ -1028,11 +1027,11 @@ parent_dir = sys.argv[1]
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-	# CRF Off
-raw_folder_d02 = '/raw/d02_sunrise'
+raw_folder_d02 = '/raw/d02'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+# 	# CRF Off
+# raw_folder_d02 = '/raw/d02_sunrise'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
@@ -1042,7 +1041,7 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 # Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['VEGFRA', 'QFX']
+variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
 
 # Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
@@ -1083,4 +1082,5 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 # output_variable.setncatts(temp_atts)
 # output_variable[:] = variable[:]	# not a large variable so no need to loop
 # output_dataset.close()
+
 

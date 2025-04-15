@@ -530,35 +530,35 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
 # In[3]:
 
 
-# ## Pick the main folder:
-# # parent_dir = '/where/your/wrfoutfiles/exist'
-# parent_dir = sys.argv[1]
+## Pick the main folder:
+# parent_dir = '/where/your/wrfoutfiles/exist'
+parent_dir = sys.argv[1]
 
-# # Pick the raw folders:
-# # input_file_d01 = parent_dir + '/raw/d01'  # Path to the raw input netCDF file
-# # input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02_sunrise'
-# input_file_d02 = parent_dir + raw_folder_d02
+# Pick the raw folders:
+# raw_folder_d01 = '/raw/d01'  # Path to the raw input netCDF file
+raw_folder_d02 = '/raw/d02'  # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02_sunrise'		# Path to stitched raw CRFoff files
+input_file_d02 = parent_dir + raw_folder_d02
 
-# # Where does your 3-D pressure file live
-# # pressure_file_d01 = parent_dir + '/L1/d01_P'
-# # pressure_file_d02 = parent_dir + '/L1/d02_P'
+# Where does your 3-D pressure file live
+# pressure_file_d01 = parent_dir + '/L1/d01_P'
+pressure_file_d02 = parent_dir + '/L1/d02_P'
 # pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
 
 
-# # Output to level 2 directory:
-# output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
-# # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
-# # variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-# variable_name = ['QV', 'QC', 'QR', 'QI', 'QS', 'QG']
+# Output to level 2 directory:
+output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
+# Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
+# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
 
-# # Declare the vertial levels you want to interpolate:
-# # vertical_levels = np.array(1000)
-# # vertical_levels = np.arange(1000,0,-50)
-# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+# Declare the vertial levels you want to interpolate:
+# vertical_levels = np.array(1000)
+# vertical_levels = np.arange(1000,0,-50)
+vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
-# # interp_variable(input_file_d01, pressure_file_d01, variable_name, output_dir, vertical_levels)
-# # interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels, file_name=raw_folder_d02[5:])
+# interp_variable(input_file_d01, pressure_file_d01, variable_name, output_dir, vertical_levels)
+interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, vertical_levels, file_name=raw_folder_d02[5:])
 
 
 # In[59]:
@@ -642,13 +642,13 @@ def layer_weighted_average(ds_CLDFRA, lower_layer, upper_layer, vertical_levels)
 vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
 	# Control where icloud=1
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
-# raw_folder_d02 = '/L2/d02_interp_CLDFRA'
-# file_name = 'd02'
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00'
+raw_folder_d02 = '/L2/d02_interp_CLDFRA'
+file_name = 'd02'
 	# NCRF where icloud=0
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
-raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
-file_name = 'd02_sunrise'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
+# file_name = 'd02_sunrise'
 
 output_dir = parent_dir + '/L1/'
 input_file_d02 = parent_dir + raw_folder_d02
