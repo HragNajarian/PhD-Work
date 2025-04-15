@@ -1,0 +1,18 @@
+#!/bin/bash
+#SBATCH -p radclouds
+#SBATCH -N 6
+#SBATCH -n 336
+#SBATCH --nodelist=c795,c797,c798,c799,c854,c855
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 60:00:00 # max job run time HH:MM:SS
+
+
+module purge
+source bashrc_wrf
+
+echo "+:h:0:RTHRATSW,RTHRATLW,RTHRATSWC,RTHRATLWC,H_DIABATIC" > var_extra_output
+
+mpirun ./wrf.exe
+
