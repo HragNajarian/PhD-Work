@@ -23,11 +23,9 @@
 			
 ##############################################################################
 
-import netCDF4 as nc
 import numpy as np
-import numpy.ma as ma
 import xarray as xr
-from math import cos, asin, sqrt, pi, atan, degrees
+from math import cos, asin, sqrt, pi, atan
 import time
 import os
 import sys
@@ -315,7 +313,7 @@ def without_keys(d, keys):
 # ## Main Code
 # #### This code is designed to read in the variable, create a cross-section of that variable, save the cross-section as an .nc file, then delete the variable. Originally, reading all the variables first and then saving files was attempted, but the system runs out of memory quite quickly.
 
-# In[13]:
+# In[ ]:
 
 
 ##cd into the appropriate directory (L3) and then assign a parent directory
@@ -323,1561 +321,1053 @@ parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
 
 # Assign the correct location directory depending on where you're trying to cross-section
-loc_dir = '/L3/Borneo_northwest'
+local_dir = ['/L3/Sumatra_mid_central','/L3/Sumatra_northwest','/L3/Borneo_northwest']
 # List of dirs:
     # /L3/Sumatra_mid_central
     # /L3/Sumatra_northwest
     # /L3/Borneo_northwest
 
-os.chdir(parent_dir+loc_dir)
-
-# Raw dataset
-file_d01_raw = parent_dir + '/raw/d01'
-file_d02_raw = parent_dir + '/raw/d02'
-
-# 2-D data
-file_d01_RR = parent_dir + '/L1/d01_RR'						# [mm/dt]
-file_d02_RR = parent_dir + '/L1/d02_RR'						# [mm/dt]
-file_d01_U10 = parent_dir + '/L1/d01_U10'					# [m/s]
-file_d02_U10 = parent_dir + '/L1/d02_U10'					# [m/s]
-file_d01_V10 = parent_dir + '/L1/d01_V10'					# [m/s]
-file_d02_V10 = parent_dir + '/L1/d02_V10'					# [m/s]
-file_d01_PSFC = parent_dir + '/L1/d01_PSFC'					# [hPa]
-file_d02_PSFC = parent_dir + '/L1/d02_PSFC'					# [hPa]
-file_d01_T2 = parent_dir + '/L1/d01_T2'						# [K]
-file_d02_T2 = parent_dir + '/L1/d02_T2'						# [K]
-file_d01_HFX = parent_dir + '/L1/d01_HFX'					# [W/m^2]
-file_d02_HFX = parent_dir + '/L1/d02_HFX'					# [W/m^2]
-file_d01_QFX = parent_dir + '/L1/d01_QFX'					# [W/m^2]
-file_d02_QFX = parent_dir + '/L1/d02_QFX'					# [W/m^2]
-file_d01_LH = parent_dir + '/L1/d01_LH'					    # [kg/(m^2s^1)]
-file_d02_LH = parent_dir + '/L1/d02_LH'					    # [kg/(m^2s^1)]
-file_d01_CAPE = parent_dir + '/L1/d01_CAPE'                 # [J/kg]
-file_d02_CAPE = parent_dir + '/L1/d02_CAPE'	                # [J/kg]
-file_d01_CIN = parent_dir + '/L1/d01_CIN'                   # [J/kg]
-file_d02_CIN = parent_dir + '/L1/d02_CIN'	                # [J/kg]
-
-# All-sky
-file_d01_LWUPT = parent_dir + '/L1/d01_LWUPT'				# [W/m^2]
-file_d02_LWUPT = parent_dir + '/L1/d02_LWUPT'				# [W/m^2]
-file_d01_LWDNT = parent_dir + '/L1/d01_LWDNT'				# [W/m^2]
-file_d02_LWDNT = parent_dir + '/L1/d02_LWDNT'				# [W/m^2]
-file_d01_LWUPB = parent_dir + '/L1/d01_LWUPB'				# [W/m^2]
-file_d02_LWUPB = parent_dir + '/L1/d02_LWUPB'				# [W/m^2]
-file_d01_LWDNB = parent_dir + '/L1/d01_LWDNB'				# [W/m^2]
-file_d02_LWDNB = parent_dir + '/L1/d02_LWDNB'				# [W/m^2]
-file_d01_SWUPT = parent_dir + '/L1/d01_SWUPT'				# [W/m^2]
-file_d02_SWUPT = parent_dir + '/L1/d02_SWUPT'				# [W/m^2]
-file_d01_SWDNT = parent_dir + '/L1/d01_SWDNT'				# [W/m^2]
-file_d02_SWDNT = parent_dir + '/L1/d02_SWDNT'				# [W/m^2]
-file_d01_SWUPB = parent_dir + '/L1/d01_SWUPB'				# [W/m^2]
-file_d02_SWUPB = parent_dir + '/L1/d02_SWUPB'				# [W/m^2]
-file_d01_SWDNB = parent_dir + '/L1/d01_SWDNB'				# [W/m^2]
-file_d02_SWDNB = parent_dir + '/L1/d02_SWDNB'				# [W/m^2]
-# Clear-sky
-file_d01_LWUPTC = parent_dir + '/L1/d01_LWUPTC'				# [W/m^2]
-file_d02_LWUPTC = parent_dir + '/L1/d02_LWUPTC'				# [W/m^2]
-file_d01_LWDNTC = parent_dir + '/L1/d01_LWDNTC'				# [W/m^2]
-file_d02_LWDNTC = parent_dir + '/L1/d02_LWDNTC'				# [W/m^2]
-file_d01_LWUPBC = parent_dir + '/L1/d01_LWUPBC'				# [W/m^2]
-file_d02_LWUPBC = parent_dir + '/L1/d02_LWUPBC'				# [W/m^2]
-file_d01_LWDNBC = parent_dir + '/L1/d01_LWDNBC'				# [W/m^2]
-file_d02_LWDNBC = parent_dir + '/L1/d02_LWDNBC'				# [W/m^2]
-file_d01_SWUPTC = parent_dir + '/L1/d01_SWUPTC'				# [W/m^2]
-file_d02_SWUPTC = parent_dir + '/L1/d02_SWUPTC'				# [W/m^2]
-file_d01_SWDNTC = parent_dir + '/L1/d01_SWDNTC'				# [W/m^2]
-file_d02_SWDNTC = parent_dir + '/L1/d02_SWDNTC'				# [W/m^2]
-file_d01_SWUPBC = parent_dir + '/L1/d01_SWUPBC'				# [W/m^2]
-file_d02_SWUPBC = parent_dir + '/L1/d02_SWUPBC'				# [W/m^2]
-file_d01_SWDNBC = parent_dir + '/L1/d01_SWDNBC'				# [W/m^2]
-file_d02_SWDNBC = parent_dir + '/L1/d02_SWDNBC'				# [W/m^2]
-
-# Interpolated data 
-file_d01_U = parent_dir + '/L2/d01_interp_U'	        # [m/s]
-file_d02_U = parent_dir + '/L2/d02_interp_U'	        # [m/s]
-file_d01_V = parent_dir + '/L2/d01_interp_V'	        # [m/s]
-file_d02_V = parent_dir + '/L2/d02_interp_V'	        # [m/s]
-file_d01_W = parent_dir + '/L2/d01_interp_W'	        # [m/s]
-file_d02_W = parent_dir + '/L2/d02_interp_W'	        # [m/s]
-file_d01_QV = parent_dir + '/L2/d01_interp_QV'	        # [kg/kg]
-file_d02_QV = parent_dir + '/L2/d02_interp_QV'	        # [kg/kg]
-file_d01_QC = parent_dir + '/L2/d01_interp_QC'	        # [kg/kg]
-file_d02_QC = parent_dir + '/L2/d02_interp_QC'	        # [kg/kg]
-file_d01_QR = parent_dir + '/L2/d01_interp_QR'	        # [kg/kg]
-file_d02_QR = parent_dir + '/L2/d02_interp_QR'	        # [kg/kg]
-file_d01_QI = parent_dir + '/L2/d01_interp_QI'	        # [kg/kg]
-file_d02_QI = parent_dir + '/L2/d02_interp_QI'	        # [kg/kg]
-file_d01_QS = parent_dir + '/L2/d01_interp_QS'	        # [kg/kg]
-file_d02_QS = parent_dir + '/L2/d02_interp_QS'	        # [kg/kg]
-file_d01_QG = parent_dir + '/L2/d01_interp_QG'	        # [kg/kg]
-file_d02_QG = parent_dir + '/L2/d02_interp_QG'	        # [kg/kg]
-file_d01_CLDFRA = parent_dir + '/L2/d01_interp_CLDFRA'	# 
-file_d02_CLDFRA = parent_dir + '/L2/d02_interp_CLDFRA'	# 
-file_d01_H_DIABATIC = parent_dir + '/L2/d01_interp_H_DIABATIC'	        # [K/s]
-file_d02_H_DIABATIC = parent_dir + '/L2/d02_interp_H_DIABATIC'	        # [K/s]
-file_d01_LWAll = parent_dir + '/L2/d01_interp_LWAll'	# [K/s]
-file_d02_LWAll = parent_dir + '/L2/d02_interp_LWAll'	# [K/s]
-file_d01_LWClear = parent_dir + '/L2/d01_interp_LWClear'# [K/s]
-file_d02_LWClear = parent_dir + '/L2/d02_interp_LWClear'# [K/s]
-file_d01_SWAll = parent_dir + '/L2/d01_interp_SWAll'	# [K/s]
-file_d02_SWAll = parent_dir + '/L2/d02_interp_SWAll'	# [K/s]
-file_d01_SWClear = parent_dir + '/L2/d01_interp_SWClear'# [K/s]
-file_d02_SWClear = parent_dir + '/L2/d02_interp_SWClear'# [K/s]
-file_d01_Theta = parent_dir + '/L2/d01_interp_Theta'	# [K]
-file_d02_Theta = parent_dir + '/L2/d02_interp_Theta'	# [K]
-
-######################################################################################
-################ Declare the bounds you want to specifically look at #################
-######################################################################################
-
-#### All the data 
-# times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-02T12')]
-# lats = [-20, 20]
-# lons = [80, 135]
-
-#### Some of the data
-# times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-03T00')]
-# # times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-11-23T12')]
-# lats = [-7.5, 7.5]
-# lons = [90, 110]
-
-#### Percisely the data that is needed
-
-# First set the parameters for the specific island
-if loc_dir=='/L3/Sumatra_mid_central':
-        # Western Central Sumatra       # OLD (IGNORE)
-    start_coord		= [-2.2,103.2]      # start_coord		= [-1.8,103.8]  # [lat, lon]
-    end_coord 		= [-6.7,98.7]       # end_coord 		= [-5.8,99.8]   # [lat, lon]
-    width			= 1.5               # width			    = 1.5           # Degrees
-    dx 				= 0.025             # dx 				= 0.025         # Degrees
-elif loc_dir=='/L3/Sumatra_northwest':
-        # North West Sumatra
-    start_coord		= [5.2,96.4]
-    end_coord 		= [1.2,92.4]
-    width			= 1.5
-    dx 				= 0.025
-elif loc_dir=='/L3/Borneo_northwest':
-        # North West Borneo
-    start_coord		= [1.2,112.8]
-    end_coord 		= [5.9,108.1]
-    width			= 1.5
-    dx 				= 0.025
-
-# Find out what the angle of the cross-section is
-theta = calculate_angle_between_points(start_coord, end_coord)    # Degrees
-
-times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-03T00')]
-lats = [min(start_coord[0],end_coord[0])-width, max(start_coord[0],end_coord[0])+width]
-lons = [min(start_coord[1],end_coord[1])-width, max(start_coord[1],end_coord[1])+width]
-
-
-######################################################################################
-
-
-# Based on the bounds you set above, setup the indicies that will be used throughout
-time_ind_d01, lat_ind_d01, lon_ind_d01 = isel_ind(file_d01_raw, times, lats, lons)
-time_ind_d02, lat_ind_d02, lon_ind_d02 = isel_ind(file_d02_raw, times, lats, lons)
-
-# Raw datasets
-start_time = time.perf_counter()
-ds_d01 = open_ds(file_d01_raw,time_ind_d01,lat_ind_d01,lon_ind_d01)
-ds_d02 = open_ds(file_d02_raw,time_ind_d02,lat_ind_d02,lon_ind_d02)
-step1_time = time.perf_counter()
-print('Dataset loaded \N{check mark}', step1_time-start_time, 'seconds')
-
-# Coordinate dictionaries:
-step2_time = time.perf_counter()
-interp_P_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
-
-interp_P_levels_d01 = np.resize(interp_P_levels,(ds_d01.XLAT.shape[2],ds_d01.XLAT.shape[1],len(interp_P_levels)))
-interp_P_levels_d01 = np.swapaxes(interp_P_levels_d01, 0, 2)
-d01_coords = dict(
-    XLAT=(('Time','south_north','west_east'),ds_d01.XLAT.values),
-    XLONG=(('Time','south_north','west_east'),ds_d01.XLONG.values),
-    bottom_top=(('bottom_top'),interp_P_levels),
-    XTIME=('Time',ds_d01.XTIME.values),
-    south_north=(('south_north'),ds_d01.XLAT[0,:,0].values),
-    west_east=(('west_east'),ds_d01.XLONG[0,0,:].values)
-    )
-interp_P_levels_d02 = np.resize(interp_P_levels,(ds_d02.XLAT.shape[2],ds_d02.XLAT.shape[1],len(interp_P_levels)))
-interp_P_levels_d02 = np.swapaxes(interp_P_levels_d02, 0, 2)
-d02_coords = dict(
-    XLAT=(('Time','south_north','west_east'),ds_d02.XLAT.values),
-    XLONG=(('Time','south_north','west_east'),ds_d02.XLONG.values),
-    bottom_top=(('bottom_top'),interp_P_levels),
-    XTIME=('Time',ds_d02.XTIME.values),
-    south_north=(('south_north'),ds_d02.XLAT[0,:,0].values),
-    west_east=(('west_east'),ds_d02.XLONG[0,0,:].values)
-    )
-
-step1_time = time.perf_counter()
-print('Created coordinate dictionaries \N{check mark}', step1_time-step2_time, 'seconds')
-
-step2_time = time.perf_counter()
-#### Figure out where the coast is
-## Load Landmask
-da_d01_LANDMASK = ds_d01['LANDMASK'].compute()
-da_d01_LANDMASK = da_d01_LANDMASK.assign_coords(without_keys(d01_coords,'bottom_top'))
-da_d02_LANDMASK = ds_d02['LANDMASK'].compute()
-da_d02_LANDMASK = da_d02_LANDMASK.assign_coords(without_keys(d02_coords,'bottom_top'))
-
-# d01
-## Get the distance between start and end_coords
-da_cross_temp, all_line_coords = cross_section_multi(da_d01_LANDMASK, start_coord, end_coord, width, dx)
-# Create distance coordinate
-distance_d01 = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
-mid_cross_ind = int(da_cross_temp.shape[2]/2)	# Find middle cross-section index
-if da_cross_temp[0,0,mid_cross_ind]==0:     # Figure out if the start is over land or ocean
-	coast_ind = np.where(da_cross_temp[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
-else:
-	coast_ind = np.where(da_cross_temp[0,:,mid_cross_ind]==0)[0][0]	# First 0 (land->ocean)
-distance_d01 = distance_d01 - distance_d01[coast_ind]   # Negative values is land
-
-# d02
-da_cross_temp, all_line_coords = cross_section_multi(da_d02_LANDMASK, start_coord, end_coord, width, dx)
-# Create distance coordinate
-distance_d02 = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
-mid_cross_ind = int(da_cross_temp.shape[2]/2)	# Find middle cross-section index
-if da_cross_temp[0,0,mid_cross_ind]==0:     # Figure out if the start is over land or ocean
-	coast_ind = np.where(da_cross_temp[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
-else:
-	coast_ind = np.where(da_cross_temp[0,:,mid_cross_ind]==0)[0][0]	# First 0 (land->ocean)
-distance_d02 = distance_d02 - distance_d02[coast_ind]   # Negative values is land
-step1_time = time.perf_counter()
-print('Calculated distance measurements \N{check mark}', step1_time-step2_time, 'seconds')
-
-# Do this to first figure out what the missing data value is
-ds = open_ds(file_d01_U,time_ind_d01,lat_ind_d01,lon_ind_d01)
-fill_value_f8 = ds['U'].max().values      # This is the fill_value meaning missing_data
-
-######################################################################################################################################
-################# Load in the variables ##############################################################################################
-######################################################################################################################################
-
-
-##################### 3-D variables ##################################################################################################
-
-# ############ Interpolated zonal winds   [m/s] #############
-# step2_time = time.perf_counter()
-# # d01   # how I used to open data: ds = xr.open_dataset(file_d01_U).isel(Time=slice(0,t))
-# ds = open_ds(file_d01_U,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_U = ds['U'].compute()
-# da_d01_U = da_d01_U.assign_coords(d01_coords)
-# da_d01_U = da_d01_U.where(da_d01_U!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_U = ds['U'].compute()
-# da_d02_U = da_d02_U.assign_coords(d02_coords)
-# da_d02_U = da_d02_U.where(da_d02_U!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated zonal winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Interpolated Meridional winds   [m/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_V,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_V = ds['V'].compute()
-# da_d01_V = da_d01_V.assign_coords(d01_coords)
-# da_d01_V = da_d01_V.where(da_d01_V!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_V,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_V = ds['V'].compute()
-# da_d02_V = da_d02_V.assign_coords(d02_coords)
-# da_d02_V = da_d02_V.where(da_d02_V!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated meridional winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-
-# ################################ Calculate Normal Wind ################################
-# ## d01
-# # Rotate the coordinate system w.r.t Sumatra's angle
-# da_u, da_v = rotate_vec(da_d01_U, da_d01_V, theta)
-# ################ Normal Wind - Cross-section Analysis ################
-# da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_NormalWind_cross = make_da_cross(da_d01_U, da_cross_temp, 'NormalWind', distance_d01, width, all_line_coords)
-# da_d01_NormalWind_cross.to_netcdf('./d01_cross_NormalWind')
-
-# # d02
-# da_u, da_v = rotate_vec(da_d02_U, da_d02_V, theta)
-# ################ Normal Wind - Cross-section Analysis ################
-# da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_NormalWind_cross = make_da_cross(da_d02_U, da_cross_temp, 'NormalWind', distance_d02, width, all_line_coords)
-# da_d02_NormalWind_cross.to_netcdf('./d02_cross_NormalWind')
-# # Delete variables after to aliviate memory strain
-# del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U, da_d01_V, da_d02_U, da_d02_V
-
-# ############ Interpolated Vertical winds   [m/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_W,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_W = ds['W'].compute()
-# da_d01_W = da_d01_W.assign_coords(d01_coords)
-# da_d01_W = da_d01_W.where(da_d01_W!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_W,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_W = ds['W'].compute()
-# da_d02_W = da_d02_W.assign_coords(d02_coords)
-# da_d02_W = da_d02_W.where(da_d02_W!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated vertical winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Vertical Wind - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_W, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_W_cross = make_da_cross(da_d01_W, da_cross_temp, 'W', distance_d01, width, all_line_coords)
-# da_d01_W_cross.to_netcdf('./d01_cross_W')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_W, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_W_cross = make_da_cross(da_d02_W, da_cross_temp, 'W', distance_d02, width, all_line_coords)
-# da_d02_W_cross.to_netcdf('./d02_cross_W')
-# # Delete variables after to aliviate memory strain
-# del da_d01_W_cross, da_d02_W_cross, da_d01_W, da_d02_W
-
-# ############ Interpolated water vapor mixing ratio  [kg/kg] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QV,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QV = ds['QV'].compute()
-# da_d01_QV = da_d01_QV.assign_coords(d01_coords)
-# da_d01_QV = da_d01_QV.where(da_d01_QV!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QV,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QV = ds['QV'].compute()
-# da_d02_QV = da_d02_QV.assign_coords(d02_coords)
-# da_d02_QV = da_d02_QV.where(da_d02_QV!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated water vapor mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Water Vapor - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QV, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QV_cross = make_da_cross(da_d01_QV, da_cross_temp, 'QV', distance_d01, width, all_line_coords)
-# da_d01_QV_cross.to_netcdf('./d01_cross_QV')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QV, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QV_cross = make_da_cross(da_d02_QV, da_cross_temp, 'QV', distance_d02, width, all_line_coords)
-# da_d02_QV_cross.to_netcdf('./d02_cross_QV')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QV_cross, da_d02_QV_cross, da_d01_QV, da_d02_QV
-
-# ############ Interpolated cloud water mixing ratio  [kg/kg] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QC = ds['QC'].compute()
-# da_d01_QC = da_d01_QC.assign_coords(d01_coords)
-# da_d01_QC = da_d01_QC.where(da_d01_QC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QC = ds['QC'].compute()
-# da_d02_QC = da_d02_QC.assign_coords(d02_coords)
-# da_d02_QC = da_d02_QC.where(da_d02_QC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Cloud water - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QC_cross = make_da_cross(da_d01_QC, da_cross_temp, 'QC', distance_d01, width, all_line_coords)
-# da_d01_QC_cross.to_netcdf('./d01_cross_QC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QC_cross = make_da_cross(da_d02_QC, da_cross_temp, 'QC', distance_d02, width, all_line_coords)
-# da_d02_QC_cross.to_netcdf('./d02_cross_QC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QC_cross, da_d02_QC_cross, da_d01_QC, da_d02_QC
-
-# ############ Interpolated rain water mixing ratio  [kg/kg] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QR,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QR = ds['QR'].compute()
-# da_d01_QR = da_d01_QR.assign_coords(d01_coords)
-# da_d01_QR = da_d01_QR.where(da_d01_QR!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QR,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QR = ds['QR'].compute()
-# da_d02_QR = da_d02_QR.assign_coords(d02_coords)
-# da_d02_QR = da_d02_QR.where(da_d02_QR!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Rain water - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QR, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QR_cross = make_da_cross(da_d01_QR, da_cross_temp, 'QR', distance_d01, width, all_line_coords)
-# da_d01_QR_cross.to_netcdf('./d01_cross_QR')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QR, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QR_cross = make_da_cross(da_d02_QR, da_cross_temp, 'QR', distance_d02, width, all_line_coords)
-# da_d02_QR_cross.to_netcdf('./d02_cross_QR')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QR_cross, da_d02_QR_cross, da_d01_QR, da_d02_QR
-
-# ############ Interpolated ice mixing ratio  [kg/kg] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QI,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QI = ds['QI'].compute()
-# da_d01_QI = da_d01_QI.assign_coords(d01_coords)
-# da_d01_QI = da_d01_QI.where(da_d01_QI!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QI,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QI = ds['QI'].compute()
-# da_d02_QI = da_d02_QI.assign_coords(d02_coords)
-# da_d02_QI = da_d02_QI.where(da_d02_QI!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Ice mixing ratio - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QI, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QI_cross = make_da_cross(da_d01_QI, da_cross_temp, 'QI', distance_d01, width, all_line_coords)
-# da_d01_QI_cross.to_netcdf('./d01_cross_QI')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QI, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QI_cross = make_da_cross(da_d02_QI, da_cross_temp, 'QI', distance_d02, width, all_line_coords)
-# da_d02_QI_cross.to_netcdf('./d02_cross_QI')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QI_cross, da_d02_QI_cross, da_d01_QI, da_d02_QI
-
-# ############ Interpolated snow mixing ratio  [kg/kg] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QS,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QS = ds['QS'].compute()
-# da_d01_QS = da_d01_QS.assign_coords(d01_coords)
-# da_d01_QS = da_d01_QS.where(da_d01_QS!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QS,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QS = ds['QS'].compute()
-# da_d02_QS = da_d02_QS.assign_coords(d02_coords)
-# da_d02_QS = da_d02_QS.where(da_d02_QS!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Snow mixing ratio - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QS, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QS_cross = make_da_cross(da_d01_QS, da_cross_temp, 'QS', distance_d01, width, all_line_coords)
-# da_d01_QS_cross.to_netcdf('./d01_cross_QS')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QS, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QS_cross = make_da_cross(da_d02_QS, da_cross_temp, 'QS', distance_d02, width, all_line_coords)
-# da_d02_QS_cross.to_netcdf('./d02_cross_QS')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QS_cross, da_d02_QS_cross, da_d01_QS, da_d02_QS
-
-# ############ Interpolated graupel mixing ratio  [kg/kg] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QG,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QG = ds['QG'].compute()
-# da_d01_QG = da_d01_QG.assign_coords(d01_coords)
-# da_d01_QG = da_d01_QG.where(da_d01_QG!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QG,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QG = ds['QG'].compute()
-# da_d02_QG = da_d02_QG.assign_coords(d02_coords)
-# da_d02_QG = da_d02_QG.where(da_d02_QG!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############################ Graupel mixing ratio - Cross-section Analysis ############################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QG, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QG_cross = make_da_cross(da_d01_QG, da_cross_temp, 'QG', distance_d01, width, all_line_coords)
-# da_d01_QG_cross.to_netcdf('./d01_cross_QG')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QG, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QG_cross = make_da_cross(da_d02_QG, da_cross_temp, 'QG', distance_d02, width, all_line_coords)
-# da_d02_QG_cross.to_netcdf('./d02_cross_QG')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QG_cross, da_d02_QG_cross, da_d01_QG, da_d02_QG
-
-# ############ Cloud Fraction [0-1] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_CLDFRA,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_CLDFRA = ds['CLDFRA'].compute()
-# da_d01_CLDFRA = da_d01_CLDFRA.assign_coords(d01_coords)
-# da_d01_CLDFRA = da_d01_CLDFRA.where(da_d01_CLDFRA!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_CLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_CLDFRA = ds['CLDFRA'].compute()
-# da_d02_CLDFRA = da_d02_CLDFRA.assign_coords(d02_coords)
-# da_d02_CLDFRA = da_d02_CLDFRA.where(da_d02_CLDFRA!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Cloud fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Cloud Fraction - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_CLDFRA, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_CLDFRA_cross = make_da_cross(da_d01_CLDFRA, da_cross_temp, 'CLDFRA', distance_d01, width, all_line_coords)
-# da_d01_CLDFRA_cross.to_netcdf('./d01_cross_CLDFRA')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_CLDFRA, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_CLDFRA_cross = make_da_cross(da_d02_CLDFRA, da_cross_temp, 'CLDFRA', distance_d02, width, all_line_coords)
-# da_d02_CLDFRA_cross.to_netcdf('./d02_cross_CLDFRA')
-# # Delete variables after to aliviate memory strain
-# del da_d01_CLDFRA_cross, da_d02_CLDFRA_cross, da_d01_CLDFRA, da_d02_CLDFRA
-
-# ############ Latent Heating [K/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_H_DIABATIC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_H_DIABATIC = ds['H_DIABATIC'].compute()
-# da_d01_H_DIABATIC = da_d01_H_DIABATIC.assign_coords(d01_coords)
-# da_d01_H_DIABATIC = da_d01_H_DIABATIC.where(da_d01_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_H_DIABATIC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_H_DIABATIC = ds['H_DIABATIC'].compute()
-# da_d02_H_DIABATIC = da_d02_H_DIABATIC.assign_coords(d02_coords)
-# da_d02_H_DIABATIC = da_d02_H_DIABATIC.where(da_d02_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Latent heating loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Latent Heat - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_H_DIABATIC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_H_DIABATIC_cross = make_da_cross(da_d01_H_DIABATIC, da_cross_temp, 'H_DIABATIC', distance_d01, width, all_line_coords)
-# da_d01_H_DIABATIC_cross.to_netcdf('./d01_cross_H_DIABATIC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_H_DIABATIC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_H_DIABATIC_cross = make_da_cross(da_d02_H_DIABATIC, da_cross_temp, 'H_DIABATIC', distance_d02, width, all_line_coords)
-# da_d02_H_DIABATIC_cross.to_netcdf('./d02_cross_H_DIABATIC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_H_DIABATIC_cross, da_d02_H_DIABATIC_cross, da_d01_H_DIABATIC, da_d02_H_DIABATIC
-
-# ############ Potential Temperature [K] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_Theta,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_Theta = ds['Theta'].compute()
-# da_d01_Theta = da_d01_Theta.assign_coords(d01_coords)
-# da_d01_Theta = da_d01_Theta.where(da_d01_Theta!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_Theta,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_Theta = ds['Theta'].compute()
-# da_d02_Theta = da_d02_Theta.assign_coords(d02_coords)
-# da_d02_Theta = da_d02_Theta.where(da_d02_Theta!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Shortwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Potential Temperature/Theta - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_Theta, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_Theta_cross = make_da_cross(da_d01_Theta, da_cross_temp, 'Theta', distance_d01, width, all_line_coords)
-# da_d01_Theta_cross.to_netcdf('./d01_cross_Theta')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_Theta, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_Theta_cross = make_da_cross(da_d02_Theta, da_cross_temp, 'Theta', distance_d02, width, all_line_coords)
-# da_d02_Theta_cross.to_netcdf('./d02_cross_Theta')
-# # Delete variables after to aliviate memory strain
-# del da_d01_Theta_cross, da_d02_Theta_cross, da_d01_Theta, da_d02_Theta
-
-# ############ Longwave Radiative Heating All-Sky [K/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWAll,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWAll = ds['LWAll'].compute()
-# da_d01_LWAll = da_d01_LWAll.assign_coords(d01_coords)
-# da_d01_LWAll = da_d01_LWAll.where(da_d01_LWAll!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWAll,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWAll = ds['LWAll'].compute()
-# da_d02_LWAll = da_d02_LWAll.assign_coords(d02_coords)
-# da_d02_LWAll = da_d02_LWAll.where(da_d02_LWAll!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Longwave All-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Longwave All - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWAll, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWAll_cross = make_da_cross(da_d01_LWAll, da_cross_temp, 'LWAll', distance_d01, width, all_line_coords)
-# da_d01_LWAll_cross.to_netcdf('./d01_cross_LWAll')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWAll, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWAll_cross = make_da_cross(da_d02_LWAll, da_cross_temp, 'LWAll', distance_d02, width, all_line_coords)
-# da_d02_LWAll_cross.to_netcdf('./d02_cross_LWAll')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWAll, da_d02_LWAll
-
-# ############ Longwave Radiative Heating Clear-Sky [K/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWClear,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWClear = ds['LWClear'].compute()
-# da_d01_LWClear = da_d01_LWClear.assign_coords(d01_coords)
-# da_d01_LWClear = da_d01_LWClear.where(da_d01_LWClear!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWClear,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWClear = ds['LWClear'].compute()
-# da_d02_LWClear = da_d02_LWClear.assign_coords(d02_coords)
-# da_d02_LWClear = da_d02_LWClear.where(da_d02_LWClear!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Longwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Longwave Clear - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWClear, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWClear_cross = make_da_cross(da_d01_LWClear, da_cross_temp, 'LWClear', distance_d01, width, all_line_coords)
-# da_d01_LWClear_cross.to_netcdf('./d01_cross_LWClear')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWClear, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWClear_cross = make_da_cross(da_d02_LWClear, da_cross_temp, 'LWClear', distance_d02, width, all_line_coords)
-# da_d02_LWClear_cross.to_netcdf('./d02_cross_LWClear')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWClear, da_d02_LWClear
-
-# ################ Longwave CRF - Cross-section Analysis ################
-# # Calculate the CRF
-# da_d01_LWCRF_cross = da_d01_LWAll_cross - da_d01_LWClear_cross
-# da_d01_LWCRF_cross = xr.DataArray(data=da_d01_LWCRF_cross, name='LWCRF')
-# da_d01_LWCRF_cross.to_netcdf('./d01_cross_LWCRF')
-# da_d02_LWCRF_cross = da_d02_LWAll_cross - da_d02_LWClear_cross
-# da_d02_LWCRF_cross = xr.DataArray(data=da_d02_LWCRF_cross, name='LWCRF')
-# da_d02_LWCRF_cross.to_netcdf('./d02_cross_LWCRF')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWAll_cross, da_d02_LWAll_cross, da_d01_LWClear_cross, da_d02_LWClear_cross
-
-# ############ Shortwave Radiative Heating All-Sky [K/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWAll,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWAll = ds['SWAll'].compute()
-# da_d01_SWAll = da_d01_SWAll.assign_coords(d01_coords)
-# da_d01_SWAll = da_d01_SWAll.where(da_d01_SWAll!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWAll,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWAll = ds['SWAll'].compute()
-# da_d02_SWAll = da_d02_SWAll.assign_coords(d02_coords)
-# da_d02_SWAll = da_d02_SWAll.where(da_d02_SWAll!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Shortwave All-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Shortwave All - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWAll, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWAll_cross = make_da_cross(da_d01_SWAll, da_cross_temp, 'SWAll', distance_d01, width, all_line_coords)
-# da_d01_SWAll_cross.to_netcdf('./d01_cross_SWAll')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWAll, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWAll_cross = make_da_cross(da_d02_SWAll, da_cross_temp, 'SWAll', distance_d02, width, all_line_coords)
-# da_d02_SWAll_cross.to_netcdf('./d02_cross_SWAll')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWAll, da_d02_SWAll
-
-# ############ Shortwave Radiative Heating Clear-Sky [K/s] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWClear,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWClear = ds['SWClear'].compute()
-# da_d01_SWClear = da_d01_SWClear.assign_coords(d01_coords)
-# da_d01_SWClear = da_d01_SWClear.where(da_d01_SWClear!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWClear,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWClear = ds['SWClear'].compute()
-# da_d02_SWClear = da_d02_SWClear.assign_coords(d02_coords)
-# da_d02_SWClear = da_d02_SWClear.where(da_d02_SWClear!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Shortwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Shortwave Clear - Cross-section Analysis ################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWClear, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWClear_cross = make_da_cross(da_d01_SWClear, da_cross_temp, 'SWClear', distance_d01, width, all_line_coords)
-# da_d01_SWClear_cross.to_netcdf('./d01_cross_SWClear')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWClear, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWClear_cross = make_da_cross(da_d02_SWClear, da_cross_temp, 'SWClear', distance_d02, width, all_line_coords)
-# da_d02_SWClear_cross.to_netcdf('./d02_cross_SWClear')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWClear, da_d02_SWClear
-
-# ################ Shortwave CRF - Cross-section Analysis ################
-# # Calculate the CRF
-# da_d01_SWCRF_cross = da_d01_SWAll_cross - da_d01_SWClear_cross
-# da_d01_SWCRF_cross = xr.DataArray(data=da_d01_SWCRF_cross, name='SWCRF')
-# da_d01_SWCRF_cross.to_netcdf('./d01_cross_SWCRF')
-# da_d02_SWCRF_cross = da_d02_SWAll_cross - da_d02_SWClear_cross
-# da_d02_SWCRF_cross = xr.DataArray(data=da_d02_SWCRF_cross, name='SWCRF')
-# da_d02_SWCRF_cross.to_netcdf('./d02_cross_SWCRF')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWClear_cross, da_d02_SWClear_cross, da_d01_SWAll_cross, da_d02_SWAll_cross
-
-# ################ Total CRF - Cross-section Analysis ################
-# # Calculate the Total CRF
-# da_d01_TotalCRF_cross = da_d01_SWCRF_cross + da_d01_LWCRF_cross
-# da_d01_TotalCRF_cross = xr.DataArray(data=da_d01_TotalCRF_cross, name='TotalCRF')
-# da_d01_TotalCRF_cross.to_netcdf('./d01_cross_TotalCRF')
-# da_d02_TotalCRF_cross = da_d02_SWCRF_cross + da_d02_LWCRF_cross
-# da_d02_TotalCRF_cross = xr.DataArray(data=da_d02_TotalCRF_cross, name='TotalCRF')
-# da_d02_TotalCRF_cross.to_netcdf('./d02_cross_TotalCRF')
-# # Delete variables after to aliviate memory strain
-# del da_d01_TotalCRF_cross, da_d02_TotalCRF_cross, da_d01_SWCRF_cross, da_d01_LWCRF_cross, da_d02_SWCRF_cross, da_d02_LWCRF_cross
-
-# #################################################################################################################################################
-# ##################### 2-D variables #############################################################################################################
-# #################################################################################################################################################
-
-# ############ Rain Rate     [mm/hr] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_RR,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_RR = ds['RR'].compute()
-# da_d01_RR = da_d01_RR.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_RR = da_d01_RR.where(da_d01_RR!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_RR,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_RR = ds['RR'].compute()
-# da_d02_RR = da_d02_RR.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_RR = da_d02_RR.where(da_d02_RR!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Rain Rate - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_RR, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_RR_cross = make_da_cross(da_d01_RR, da_cross_temp, 'RR', distance_d01, width, all_line_coords)
-# da_d01_RR_cross.to_netcdf('./d01_cross_RR')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_RR, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_RR_cross = make_da_cross(da_d02_RR, da_cross_temp, 'RR', distance_d02, width, all_line_coords)
-# da_d02_RR_cross.to_netcdf('./d02_cross_RR')
-# # Delete variables after to aliviate memory strain
-# del da_d01_RR, da_d02_RR, da_d01_RR_cross, da_d02_RR_cross
-
-############ Surface U Wind     [m/s] ############
-step2_time = time.perf_counter()
-# d01
-ds = open_ds(file_d01_U10,time_ind_d01,lat_ind_d01,lon_ind_d01)
-da_d01_U10 = ds['U10'].compute()
-da_d01_U10 = da_d01_U10.assign_coords(without_keys(d01_coords,'bottom_top'))
-da_d01_U10 = da_d01_U10.where(da_d01_U10!=fill_value_f8)    # Change fill_value points to nans
-# d02
-ds = open_ds(file_d02_U10,time_ind_d02,lat_ind_d02,lon_ind_d02)
-da_d02_U10 = ds['U10'].compute()
-da_d02_U10 = da_d02_U10.assign_coords(without_keys(d02_coords,'bottom_top'))
-da_d02_U10 = da_d02_U10.where(da_d02_U10!=fill_value_f8)    # Change fill_value points to nans
-
-step1_time = time.perf_counter()
-print('U10 rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-################ Surface U Wind - Cross-section Analysis #################
-# d01
-da_cross_temp, all_line_coords = cross_section_multi(da_d01_U10, start_coord, end_coord, width, dx)
-# Create da with coordinates
-da_d01_U10_cross = make_da_cross(da_d01_U10, da_cross_temp, 'U10', distance_d01, width, all_line_coords)
-da_d01_U10_cross.to_netcdf('./d01_cross_U10')
-# d02
-da_cross_temp, all_line_coords = cross_section_multi(da_d02_U10, start_coord, end_coord, width, dx)
-# Create da with coordinates
-da_d02_U10_cross = make_da_cross(da_d02_U10, da_cross_temp, 'U10', distance_d02, width, all_line_coords)
-da_d02_U10_cross.to_netcdf('./d02_cross_U10')
-# Delete variables after to aliviate memory strain
-# del da_d01_U10, da_d02_U10, da_d01_U10_cross, da_d02_U10_cross
-
-############ Surface V Wind     [m/s] ############
-step2_time = time.perf_counter()
-# d01
-ds = open_ds(file_d01_V10,time_ind_d01,lat_ind_d01,lon_ind_d01)
-da_d01_V10 = ds['V10'].compute()
-da_d01_V10 = da_d01_V10.assign_coords(without_keys(d01_coords,'bottom_top'))
-da_d01_V10 = da_d01_V10.where(da_d01_V10!=fill_value_f8)    # Change fill_value points to nans
-# d02
-ds = open_ds(file_d02_V10,time_ind_d02,lat_ind_d02,lon_ind_d02)
-da_d02_V10 = ds['V10'].compute()
-da_d02_V10 = da_d02_V10.assign_coords(without_keys(d02_coords,'bottom_top'))
-da_d02_V10 = da_d02_V10.where(da_d02_V10!=fill_value_f8)    # Change fill_value points to nans
-
-step1_time = time.perf_counter()
-print('V10 rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-################ Surface V Wind - Cross-section Analysis #################
-# d01
-da_cross_temp, all_line_coords = cross_section_multi(da_d01_V10, start_coord, end_coord, width, dx)
-# Create da with coordinates
-da_d01_V10_cross = make_da_cross(da_d01_V10, da_cross_temp, 'V10', distance_d01, width, all_line_coords)
-da_d01_V10_cross.to_netcdf('./d01_cross_V10')
-# d02
-da_cross_temp, all_line_coords = cross_section_multi(da_d02_V10, start_coord, end_coord, width, dx)
-# Create da with coordinates
-da_d02_V10_cross = make_da_cross(da_d02_V10, da_cross_temp, 'V10', distance_d02, width, all_line_coords)
-da_d02_V10_cross.to_netcdf('./d02_cross_V10')
-# Delete variables after to aliviate memory strain
-# del da_d01_V10, da_d02_V10, da_d01_V10_cross, da_d02_V10_cross
-
-################################ Calculate Surface Normal Wind ################################
-## d01
-# Rotate the coordinate system w.r.t the angle
-da_u10, da_v10 = rotate_vec(da_d01_U10, da_d01_V10, theta)
-################ Normal Wind - Cross-section Analysis ################
-da_cross_temp, all_line_coords = cross_section_multi(da_u10, start_coord, end_coord, width, dx)
-# Create da with coordinates
-da_d01_NormalWind_cross = make_da_cross(da_d01_U10, da_cross_temp, 'NormalWind', distance_d01, width, all_line_coords)
-da_d01_NormalWind_cross.to_netcdf('./d01_cross_SurfaceNormalWind')
-
-# d02
-da_u10, da_v10 = rotate_vec(da_d02_U10, da_d02_V10, theta)
-################ Normal Wind - Cross-section Analysis ################
-da_cross_temp, all_line_coords = cross_section_multi(da_u10, start_coord, end_coord, width, dx)
-# Create da with coordinates
-da_d02_NormalWind_cross = make_da_cross(da_d02_U10, da_cross_temp, 'NormalWind', distance_d02, width, all_line_coords)
-da_d02_NormalWind_cross.to_netcdf('./d02_cross_SurfaceNormalWind')
-# Delete variables after to aliviate memory strain
-del da_d01_NormalWind_cross, da_d02_NormalWind_cross, da_d01_U10, da_d01_V10, da_d02_U10, da_d02_V10, da_d01_V10_cross, da_d02_V10_cross, da_d01_U10_cross, da_d02_U10_cross
-
-# ############ Upward Heat Flux at Surface     [W/m^2] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_HFX,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_HFX = ds['HFX'].compute()
-# da_d01_HFX = da_d01_HFX.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_HFX = da_d01_HFX.where(da_d01_HFX!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_HFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_HFX = ds['HFX'].compute()
-# da_d02_HFX = da_d02_HFX.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_HFX = da_d02_HFX.where(da_d02_HFX!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Upward Heat Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Upward Heat Flux at Surface - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_HFX, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_HFX_cross = make_da_cross(da_d01_HFX, da_cross_temp, 'HFX', distance_d01, width, all_line_coords)
-# da_d01_HFX_cross.to_netcdf('./d01_cross_HFX')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_HFX, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_HFX_cross = make_da_cross(da_d02_HFX, da_cross_temp, 'HFX', distance_d02, width, all_line_coords)
-# da_d02_HFX_cross.to_netcdf('./d02_cross_HFX')
-# # Delete variables after to aliviate memory strain
-# del da_d01_HFX, da_d02_HFX, da_d01_HFX_cross, da_d02_HFX_cross
-
-
-# ############ Upward Moisture Flux at Surface     [kg/(m^2s^1)] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_QFX,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_QFX = ds['QFX'].compute()
-# da_d01_QFX = da_d01_QFX.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_QFX = da_d01_QFX.where(da_d01_QFX!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_QFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_QFX = ds['QFX'].compute()
-# da_d02_QFX = da_d02_QFX.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_QFX = da_d02_QFX.where(da_d02_QFX!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Upward Moisture Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Upward Moisture Flux at Surface - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_QFX, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_QFX_cross = make_da_cross(da_d01_QFX, da_cross_temp, 'QFX', distance_d01, width, all_line_coords)
-# da_d01_QFX_cross.to_netcdf('./d01_cross_QFX')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_QFX, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_QFX_cross = make_da_cross(da_d02_QFX, da_cross_temp, 'QFX', distance_d02, width, all_line_coords)
-# da_d02_QFX_cross.to_netcdf('./d02_cross_QFX')
-# # Delete variables after to aliviate memory strain
-# del da_d01_QFX, da_d02_QFX, da_d01_QFX_cross, da_d02_QFX_cross
-
-
-# ############ Latent Heat Flux at Surface		[W/m^2] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LH,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LH = ds['LH'].compute()
-# da_d01_LH = da_d01_LH.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LH = da_d01_LH.where(da_d01_LH!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LH,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LH = ds['LH'].compute()
-# da_d02_LH = da_d02_LH.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LH = da_d02_LH.where(da_d02_LH!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Latent Heat Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Latent Heat Flux at Surface - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LH, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LH_cross = make_da_cross(da_d01_LH, da_cross_temp, 'LH', distance_d01, width, all_line_coords)
-# da_d01_LH_cross.to_netcdf('./d01_cross_LH')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LH, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LH_cross = make_da_cross(da_d02_LH, da_cross_temp, 'LH', distance_d02, width, all_line_coords)
-# da_d02_LH_cross.to_netcdf('./d02_cross_LH')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LH, da_d02_LH, da_d01_LH_cross, da_d02_LH_cross
-
-
-# ############ Temperature at 2m     [K] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_T2,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_T2 = ds['T2'].compute()
-# da_d01_T2 = da_d01_T2.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_T2 = da_d01_T2.where(da_d01_T2!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_T2,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_T2 = ds['T2'].compute()
-# da_d02_T2 = da_d02_T2.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_T2 = da_d02_T2.where(da_d02_T2!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Temperature at 2m loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Temperature at 2m - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_T2, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_T2_cross = make_da_cross(da_d01_T2, da_cross_temp, 'T2', distance_d01, width, all_line_coords)
-# da_d01_T2_cross.to_netcdf('./d01_cross_T2')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_T2, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_T2_cross = make_da_cross(da_d02_T2, da_cross_temp, 'T2', distance_d02, width, all_line_coords)
-# da_d02_T2_cross.to_netcdf('./d02_cross_T2')
-# # Delete variables after to aliviate memory strain
-# del da_d01_T2, da_d02_T2, da_d01_T2_cross, da_d02_T2_cross
-
-
-# ############ Surface Pressure     [hPa] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_PSFC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_PSFC = ds['PSFC'].compute()
-# da_d01_PSFC = da_d01_PSFC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_PSFC = da_d01_PSFC.where(da_d01_PSFC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_PSFC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_PSFC = ds['PSFC'].compute()
-# da_d02_PSFC = da_d02_PSFC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_PSFC = da_d02_PSFC.where(da_d02_PSFC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Surface Pressure loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ Surface Pressure - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_PSFC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_PSFC_cross = make_da_cross(da_d01_PSFC, da_cross_temp, 'PSFC', distance_d01, width, all_line_coords)
-# da_d01_PSFC_cross.to_netcdf('./d01_cross_PSFC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_PSFC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_PSFC_cross = make_da_cross(da_d02_PSFC, da_cross_temp, 'PSFC', distance_d02, width, all_line_coords)
-# da_d02_PSFC_cross.to_netcdf('./d02_cross_PSFC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_PSFC, da_d02_PSFC, da_d01_PSFC_cross, da_d02_PSFC_cross
-
-
-# ############ CAPE     [hPa] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_CAPE,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_CAPE = ds['CAPE'].compute()
-# da_d01_CAPE = da_d01_CAPE.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_CAPE = da_d01_CAPE.where(da_d01_CAPE!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_CAPE,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_CAPE = ds['CAPE'].compute()
-# da_d02_CAPE = da_d02_CAPE.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_CAPE = da_d02_CAPE.where(da_d02_CAPE!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('CAPE loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ CAPE - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_CAPE, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_CAPE_cross = make_da_cross(da_d01_CAPE, da_cross_temp, 'CAPE', distance_d01, width, all_line_coords)
-# da_d01_CAPE_cross.to_netcdf('./d01_cross_CAPE')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_CAPE, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_CAPE_cross = make_da_cross(da_d02_CAPE, da_cross_temp, 'CAPE', distance_d02, width, all_line_coords)
-# da_d02_CAPE_cross.to_netcdf('./d02_cross_CAPE')
-# # Delete variables after to aliviate memory strain
-# del da_d01_CAPE, da_d02_CAPE, da_d01_CAPE_cross, da_d02_CAPE_cross
-
-
-# ############ CIN     [hPa] ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_CIN,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_CIN = ds['CIN'].compute()
-# da_d01_CIN = da_d01_CIN.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_CIN = da_d01_CIN.where(da_d01_CIN!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_CIN,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_CIN = ds['CIN'].compute()
-# da_d02_CIN = da_d02_CIN.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_CIN = da_d02_CIN.where(da_d02_CIN!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('CIN loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ################ CIN - Cross-section Analysis #################
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_CIN, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_CIN_cross = make_da_cross(da_d01_CIN, da_cross_temp, 'CIN', distance_d01, width, all_line_coords)
-# da_d01_CIN_cross.to_netcdf('./d01_cross_CIN')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_CIN, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_CIN_cross = make_da_cross(da_d02_CIN, da_cross_temp, 'CIN', distance_d02, width, all_line_coords)
-# da_d02_CIN_cross.to_netcdf('./d02_cross_CIN')
-# # Delete variables after to aliviate memory strain
-# del da_d01_CIN, da_d02_CIN, da_d01_CIN_cross, da_d02_CIN_cross
-
-######################################################################################################################################################
-################################# All-sky ############################################################################################################
-######################################################################################################################################################
-
-# ############ Load Longwave Upwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWUPT,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWUPT = ds['LWUPT'].compute()
-# da_d01_LWUPT = da_d01_LWUPT.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWUPT = da_d01_LWUPT.where(da_d01_LWUPT!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWUPT,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWUPT = ds['LWUPT'].compute()
-# da_d02_LWUPT = da_d02_LWUPT.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWUPT = da_d02_LWUPT.where(da_d02_LWUPT!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Upwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWUPT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWUPT_cross = make_da_cross(da_d01_LWUPT, da_cross_temp, 'LWUPT', distance_d01, width, all_line_coords)
-# da_d01_LWUPT_cross.to_netcdf('./d01_cross_LWUPT')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWUPT_cross = make_da_cross(da_d02_LWUPT, da_cross_temp, 'LWUPT', distance_d02, width, all_line_coords)
-# da_d02_LWUPT_cross.to_netcdf('./d02_cross_LWUPT')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWUPT, da_d02_LWUPT, da_d01_LWUPT_cross, da_d02_LWUPT_cross
-
-# ############ Load Longwave Downwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWDNT,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWDNT = ds['LWDNT'].compute()
-# da_d01_LWDNT = da_d01_LWDNT.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWDNT = da_d01_LWDNT.where(da_d01_LWDNT!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWDNT,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWDNT = ds['LWDNT'].compute()
-# da_d02_LWDNT = da_d02_LWDNT.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWDNT = da_d02_LWDNT.where(da_d02_LWDNT!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Downwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWDNT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWDNT_cross = make_da_cross(da_d01_LWDNT, da_cross_temp, 'LWDNT', distance_d01, width, all_line_coords)
-# da_d01_LWDNT_cross.to_netcdf('./d01_cross_LWDNT')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWDNT_cross = make_da_cross(da_d02_LWDNT, da_cross_temp, 'LWDNT', distance_d02, width, all_line_coords)
-# da_d02_LWDNT_cross.to_netcdf('./d02_cross_LWDNT')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWDNT, da_d02_LWDNT, da_d01_LWDNT_cross, da_d02_LWDNT_cross
-
-# ############ Load Longwave Upwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWUPB,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWUPB = ds['LWUPB'].compute()
-# da_d01_LWUPB = da_d01_LWUPB.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWUPB = da_d01_LWUPB.where(da_d01_LWUPB!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWUPB = ds['LWUPB'].compute()
-# da_d02_LWUPB = da_d02_LWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWUPB = da_d02_LWUPB.where(da_d02_LWUPB!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Upwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWUPB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWUPB_cross = make_da_cross(da_d01_LWUPB, da_cross_temp, 'LWUPB', distance_d01, width, all_line_coords)
-# da_d01_LWUPB_cross.to_netcdf('./d01_cross_LWUPB')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWUPB_cross = make_da_cross(da_d02_LWUPB, da_cross_temp, 'LWUPB', distance_d02, width, all_line_coords)
-# da_d02_LWUPB_cross.to_netcdf('./d02_cross_LWUPB')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWUPB, da_d02_LWUPB, da_d01_LWUPB_cross, da_d02_LWUPB_cross
-
-# ############ Load Longwave Downwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWDNB,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWDNB = ds['LWDNB'].compute()
-# da_d01_LWDNB = da_d01_LWDNB.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWDNB = da_d01_LWDNB.where(da_d01_LWDNB!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWDNB = ds['LWDNB'].compute()
-# da_d02_LWDNB = da_d02_LWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWDNB = da_d02_LWDNB.where(da_d02_LWDNB!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Downwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWDNB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWDNB_cross = make_da_cross(da_d01_LWDNB, da_cross_temp, 'LWDNB', distance_d01, width, all_line_coords)
-# da_d01_LWDNB_cross.to_netcdf('./d01_cross_LWDNB')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWDNB_cross = make_da_cross(da_d02_LWDNB, da_cross_temp, 'LWDNB', distance_d02, width, all_line_coords)
-# da_d02_LWDNB_cross.to_netcdf('./d02_cross_LWDNB')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWDNB, da_d02_LWDNB, da_d01_LWDNB_cross, da_d02_LWDNB_cross
-
-# ############ Load Shortwave Upwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWUPT,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWUPT = ds['SWUPT'].compute()
-# da_d01_SWUPT = da_d01_SWUPT.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWUPT = da_d01_SWUPT.where(da_d01_SWUPT!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWUPT,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWUPT = ds['SWUPT'].compute()
-# da_d02_SWUPT = da_d02_SWUPT.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWUPT = da_d02_SWUPT.where(da_d02_SWUPT!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Upwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWUPT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWUPT_cross = make_da_cross(da_d01_SWUPT, da_cross_temp, 'SWUPT', distance_d01, width, all_line_coords)
-# da_d01_SWUPT_cross.to_netcdf('./d01_cross_SWUPT')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWUPT_cross = make_da_cross(da_d02_SWUPT, da_cross_temp, 'SWUPT', distance_d02, width, all_line_coords)
-# da_d02_SWUPT_cross.to_netcdf('./d02_cross_SWUPT')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWUPT, da_d02_SWUPT, da_d01_SWUPT_cross, da_d02_SWUPT_cross
-
-# ############ Load Shortwave Downwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWDNT,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWDNT = ds['SWDNT'].compute()
-# da_d01_SWDNT = da_d01_SWDNT.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWDNT = da_d01_SWDNT.where(da_d01_SWDNT!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWDNT,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWDNT = ds['SWDNT'].compute()
-# da_d02_SWDNT = da_d02_SWDNT.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWDNT = da_d02_SWDNT.where(da_d02_SWDNT!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Downwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWDNT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWDNT_cross = make_da_cross(da_d01_SWDNT, da_cross_temp, 'SWDNT', distance_d01, width, all_line_coords)
-# da_d01_SWDNT_cross.to_netcdf('./d01_cross_SWDNT')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNT, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWDNT_cross = make_da_cross(da_d02_SWDNT, da_cross_temp, 'SWDNT', distance_d02, width, all_line_coords)
-# da_d02_SWDNT_cross.to_netcdf('./d02_cross_SWDNT')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWDNT, da_d02_SWDNT, da_d01_SWDNT_cross, da_d02_SWDNT_cross
-
-# ############ Load Shortwave Upwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWUPB,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWUPB = ds['SWUPB'].compute()
-# da_d01_SWUPB = da_d01_SWUPB.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWUPB = da_d01_SWUPB.where(da_d01_SWUPB!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWUPB = ds['SWUPB'].compute()
-# da_d02_SWUPB = da_d02_SWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWUPB = da_d02_SWUPB.where(da_d02_SWUPB!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Upwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWUPB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWUPB_cross = make_da_cross(da_d01_SWUPB, da_cross_temp, 'SWUPB', distance_d01, width, all_line_coords)
-# da_d01_SWUPB_cross.to_netcdf('./d01_cross_SWUPB')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWUPB_cross = make_da_cross(da_d02_SWUPB, da_cross_temp, 'SWUPB', distance_d02, width, all_line_coords)
-# da_d02_SWUPB_cross.to_netcdf('./d02_cross_SWUPB')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWUPB, da_d02_SWUPB, da_d01_SWUPB_cross, da_d02_SWUPB_cross
-
-# ############ Load Shortwave Downwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWDNB,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWDNB = ds['SWDNB'].compute()
-# da_d01_SWDNB = da_d01_SWDNB.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWDNB = da_d01_SWDNB.where(da_d01_SWDNB!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWDNB = ds['SWDNB'].compute()
-# da_d02_SWDNB = da_d02_SWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWDNB = da_d02_SWDNB.where(da_d02_SWDNB!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Downwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWDNB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWDNB_cross = make_da_cross(da_d01_SWDNB, da_cross_temp, 'SWDNB', distance_d01, width, all_line_coords)
-# da_d01_SWDNB_cross.to_netcdf('./d01_cross_SWDNB')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNB, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWDNB_cross = make_da_cross(da_d02_SWDNB, da_cross_temp, 'SWDNB', distance_d02, width, all_line_coords)
-# da_d02_SWDNB_cross.to_netcdf('./d02_cross_SWDNB')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWDNB, da_d02_SWDNB, da_d01_SWDNB_cross, da_d02_SWDNB_cross
-
-########################################################################################################################################################
-################################# Clear-sky ############################################################################################################
-########################################################################################################################################################
-
-# ############ Load Longwave Upwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWUPTC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWUPTC = ds['LWUPTC'].compute()
-# da_d01_LWUPTC = da_d01_LWUPTC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWUPTC = da_d01_LWUPTC.where(da_d01_LWUPTC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWUPTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWUPTC = ds['LWUPTC'].compute()
-# da_d02_LWUPTC = da_d02_LWUPTC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWUPTC = da_d02_LWUPTC.where(da_d02_LWUPTC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Upwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWUPTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWUPTC_cross = make_da_cross(da_d01_LWUPTC, da_cross_temp, 'LWUPTC', distance_d01, width, all_line_coords)
-# da_d01_LWUPTC_cross.to_netcdf('./d01_cross_LWUPTC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWUPTC_cross = make_da_cross(da_d02_LWUPTC, da_cross_temp, 'LWUPTC', distance_d02, width, all_line_coords)
-# da_d02_LWUPTC_cross.to_netcdf('./d02_cross_LWUPTC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWUPTC, da_d02_LWUPTC, da_d01_LWUPTC_cross, da_d02_LWUPTC_cross
-
-# ############ Load Longwave Downwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWDNTC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWDNTC = ds['LWDNTC'].compute()
-# da_d01_LWDNTC = da_d01_LWDNTC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWDNTC = da_d01_LWDNTC.where(da_d01_LWDNTC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWDNTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWDNTC = ds['LWDNTC'].compute()
-# da_d02_LWDNTC = da_d02_LWDNTC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWDNTC = da_d02_LWDNTC.where(da_d02_LWDNTC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Downwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWDNTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWDNTC_cross = make_da_cross(da_d01_LWDNTC, da_cross_temp, 'LWDNTC', distance_d01, width, all_line_coords)
-# da_d01_LWDNTC_cross.to_netcdf('./d01_cross_LWDNTC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWDNTC_cross = make_da_cross(da_d02_LWDNTC, da_cross_temp, 'LWDNTC', distance_d02, width, all_line_coords)
-# da_d02_LWDNTC_cross.to_netcdf('./d02_cross_LWDNTC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWDNTC, da_d02_LWDNTC, da_d01_LWDNTC_cross, da_d02_LWDNTC_cross
-
-# ############ Load Longwave Upwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWUPBC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWUPBC = ds['LWUPBC'].compute()
-# da_d01_LWUPBC = da_d01_LWUPBC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWUPBC = da_d01_LWUPBC.where(da_d01_LWUPBC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWUPBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWUPBC = ds['LWUPBC'].compute()
-# da_d02_LWUPBC = da_d02_LWUPBC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWUPBC = da_d02_LWUPBC.where(da_d02_LWUPBC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Upwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWUPBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWUPBC_cross = make_da_cross(da_d01_LWUPBC, da_cross_temp, 'LWUPBC', distance_d01, width, all_line_coords)
-# da_d01_LWUPBC_cross.to_netcdf('./d01_cross_LWUPBC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWUPBC_cross = make_da_cross(da_d02_LWUPBC, da_cross_temp, 'LWUPBC', distance_d02, width, all_line_coords)
-# da_d02_LWUPBC_cross.to_netcdf('./d02_cross_LWUPBC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWUPBC, da_d02_LWUPBC, da_d01_LWUPBC_cross, da_d02_LWUPBC_cross
-
-# ############ Load Longwave Downwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_LWDNBC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_LWDNBC = ds['LWDNBC'].compute()
-# da_d01_LWDNBC = da_d01_LWDNBC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_LWDNBC = da_d01_LWDNBC.where(da_d01_LWDNBC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_LWDNBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_LWDNBC = ds['LWDNBC'].compute()
-# da_d02_LWDNBC = da_d02_LWDNBC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_LWDNBC = da_d02_LWDNBC.where(da_d02_LWDNBC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Longwave Downwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_LWDNBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_LWDNBC_cross = make_da_cross(da_d01_LWDNBC, da_cross_temp, 'LWDNBC', distance_d01, width, all_line_coords)
-# da_d01_LWDNBC_cross.to_netcdf('./d01_cross_LWDNBC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_LWDNBC_cross = make_da_cross(da_d02_LWDNBC, da_cross_temp, 'LWDNBC', distance_d02, width, all_line_coords)
-# da_d02_LWDNBC_cross.to_netcdf('./d02_cross_LWDNBC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_LWDNBC, da_d02_LWDNBC, da_d01_LWDNBC_cross, da_d02_LWDNBC_cross
-
-# ############ Load Shortwave Upwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWUPTC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWUPTC = ds['SWUPTC'].compute()
-# da_d01_SWUPTC = da_d01_SWUPTC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWUPTC = da_d01_SWUPTC.where(da_d01_SWUPTC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWUPTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWUPTC = ds['SWUPTC'].compute()
-# da_d02_SWUPTC = da_d02_SWUPTC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWUPTC = da_d02_SWUPTC.where(da_d02_SWUPTC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Upwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWUPTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWUPTC_cross = make_da_cross(da_d01_SWUPTC, da_cross_temp, 'SWUPTC', distance_d01, width, all_line_coords)
-# da_d01_SWUPTC_cross.to_netcdf('./d01_cross_SWUPTC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWUPTC_cross = make_da_cross(da_d02_SWUPTC, da_cross_temp, 'SWUPTC', distance_d02, width, all_line_coords)
-# da_d02_SWUPTC_cross.to_netcdf('./d02_cross_SWUPTC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWUPTC, da_d02_SWUPTC, da_d01_SWUPTC_cross, da_d02_SWUPTC_cross
-
-# ############ Load Shortwave Downwelling at TOA ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWDNTC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWDNTC = ds['SWDNTC'].compute()
-# da_d01_SWDNTC = da_d01_SWDNTC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWDNTC = da_d01_SWDNTC.where(da_d01_SWDNTC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWDNTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWDNTC = ds['SWDNTC'].compute()
-# da_d02_SWDNTC = da_d02_SWDNTC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWDNTC = da_d02_SWDNTC.where(da_d02_SWDNTC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Downwelling at TOA ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWDNTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWDNTC_cross = make_da_cross(da_d01_SWDNTC, da_cross_temp, 'SWDNTC', distance_d01, width, all_line_coords)
-# da_d01_SWDNTC_cross.to_netcdf('./d01_cross_SWDNTC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNTC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWDNTC_cross = make_da_cross(da_d02_SWDNTC, da_cross_temp, 'SWDNTC', distance_d02, width, all_line_coords)
-# da_d02_SWDNTC_cross.to_netcdf('./d02_cross_SWDNTC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWDNTC, da_d02_SWDNTC, da_d01_SWDNTC_cross, da_d02_SWDNTC_cross
-
-# ############ Load Shortwave Upwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWUPBC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWUPBC = ds['SWUPBC'].compute()
-# da_d01_SWUPBC = da_d01_SWUPBC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWUPBC = da_d01_SWUPBC.where(da_d01_SWUPBC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWUPBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWUPBC = ds['SWUPBC'].compute()
-# da_d02_SWUPBC = da_d02_SWUPBC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWUPBC = da_d02_SWUPBC.where(da_d02_SWUPBC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Upwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWUPBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWUPBC_cross = make_da_cross(da_d01_SWUPBC, da_cross_temp, 'SWUPBC', distance_d01, width, all_line_coords)
-# da_d01_SWUPBC_cross.to_netcdf('./d01_cross_SWUPBC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWUPBC_cross = make_da_cross(da_d02_SWUPBC, da_cross_temp, 'SWUPBC', distance_d02, width, all_line_coords)
-# da_d02_SWUPBC_cross.to_netcdf('./d02_cross_SWUPBC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWUPBC, da_d02_SWUPBC, da_d01_SWUPBC_cross, da_d02_SWUPBC_cross
-
-# ############ Load Shortwave Downwelling at SFC ############
-# step2_time = time.perf_counter()
-# # d01
-# ds = open_ds(file_d01_SWDNBC,time_ind_d01,lat_ind_d01,lon_ind_d01)
-# da_d01_SWDNBC = ds['SWDNBC'].compute()
-# da_d01_SWDNBC = da_d01_SWDNBC.assign_coords(without_keys(d01_coords,'bottom_top'))
-# da_d01_SWDNBC = da_d01_SWDNBC.where(da_d01_SWDNBC!=fill_value_f8)    # Change fill_value points to nans
-# # d02
-# ds = open_ds(file_d02_SWDNBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
-# da_d02_SWDNBC = ds['SWDNBC'].compute()
-# da_d02_SWDNBC = da_d02_SWDNBC.assign_coords(without_keys(d02_coords,'bottom_top'))
-# da_d02_SWDNBC = da_d02_SWDNBC.where(da_d02_SWDNBC!=fill_value_f8)    # Change fill_value points to nans
-
-# step1_time = time.perf_counter()
-# print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
-# ############ Cross-sectional analysis of Shortwave Downwelling at SFC ############
-# # d01
-# da_cross_temp, all_line_coords = cross_section_multi(da_d01_SWDNBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d01_SWDNBC_cross = make_da_cross(da_d01_SWDNBC, da_cross_temp, 'SWDNBC', distance_d01, width, all_line_coords)
-# da_d01_SWDNBC_cross.to_netcdf('./d01_cross_SWDNBC')
-# # d02
-# da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNBC, start_coord, end_coord, width, dx)
-# # Create da with coordinates
-# da_d02_SWDNBC_cross = make_da_cross(da_d02_SWDNBC, da_cross_temp, 'SWDNBC', distance_d02, width, all_line_coords)
-# da_d02_SWDNBC_cross.to_netcdf('./d02_cross_SWDNBC')
-# # Delete variables after to aliviate memory strain
-# del da_d01_SWDNBC, da_d02_SWDNBC, da_d01_SWDNBC_cross, da_d02_SWDNBC_cross
+# loop through the regions you want to cross section
+for loc_dir in local_dir:
+
+    # Change directory
+    os.chdir(parent_dir+loc_dir)
+
+    ######################################################################################
+    ################ Declare the bounds you want to specifically look at #################
+    ######################################################################################
+
+    # First set the parameters for the specific island
+    if loc_dir=='/L3/Sumatra_mid_central':
+            # Western Central Sumatra       # OLD (IGNORE)
+        start_coord		= [-2.2,103.2]      # start_coord		= [-1.8,103.8]  # [lat, lon]
+        end_coord 		= [-6.7,98.7]       # end_coord 		= [-5.8,99.8]   # [lat, lon]
+        width			= 1.5               # width			    = 1.5           # Degrees
+        dx 				= 0.025             # dx 				= 0.025         # Degrees
+    elif loc_dir=='/L3/Sumatra_northwest':
+            # North West Sumatra
+        start_coord		= [5.2,96.4]
+        end_coord 		= [1.2,92.4]
+        width			= 1.5
+        dx 				= 0.025
+    elif loc_dir=='/L3/Borneo_northwest':
+            # North West Borneo
+        start_coord		= [1.2,112.8]
+        end_coord 		= [5.9,108.1]
+        width			= 1.5
+        dx 				= 0.025
+
+    # Find out what the angle of the cross-section is
+    theta = calculate_angle_between_points(start_coord, end_coord)    # Degrees
+
+    times = [np.datetime64('2015-12-09T12'), np.datetime64('2015-12-20T00')]
+    lats = [min(start_coord[0],end_coord[0])-width, max(start_coord[0],end_coord[0])+width]
+    lons = [min(start_coord[1],end_coord[1])-width, max(start_coord[1],end_coord[1])+width]
+
+
+    ## Declare Files
+
+    # Raw dataset
+    file_d02_raw = parent_dir + '/raw/d02'
+
+    # 2-D data
+    file_d02_RR = parent_dir + '/L1/d02_RR'						# [mm/dt]
+    file_d02_U10 = parent_dir + '/L1/d02_U10'					# [m/s]
+    file_d02_V10 = parent_dir + '/L1/d02_V10'					# [m/s]
+    file_d02_PSFC = parent_dir + '/L1/d02_PSFC'					# [hPa]
+    file_d02_T2 = parent_dir + '/L1/d02_T2'						# [K]
+    file_d02_HFX = parent_dir + '/L1/d02_HFX'					# [W/m^2]
+    file_d02_QFX = parent_dir + '/L1/d02_QFX'					# [W/m^2]
+    file_d02_LH = parent_dir + '/L1/d02_LH'					    # [kg/(m^2s^1)]
+    file_d02_CAPE = parent_dir + '/L1/d02_CAPE'	                # [J/kg]
+    file_d02_CIN = parent_dir + '/L1/d02_CIN'	                # [J/kg]
+
+    # All-sky
+    file_d02_LWUPT = parent_dir + '/L1/d02_LWUPT'				# [W/m^2]
+    file_d02_LWDNT = parent_dir + '/L1/d02_LWDNT'				# [W/m^2]
+    file_d02_LWUPB = parent_dir + '/L1/d02_LWUPB'				# [W/m^2]
+    file_d02_LWDNB = parent_dir + '/L1/d02_LWDNB'				# [W/m^2]
+    file_d02_SWUPT = parent_dir + '/L1/d02_SWUPT'				# [W/m^2]
+    file_d02_SWDNT = parent_dir + '/L1/d02_SWDNT'				# [W/m^2]
+    file_d02_SWUPB = parent_dir + '/L1/d02_SWUPB'				# [W/m^2]
+    file_d02_SWDNB = parent_dir + '/L1/d02_SWDNB'				# [W/m^2]
+    # Clear-sky
+    file_d02_LWUPTC = parent_dir + '/L1/d02_LWUPTC'				# [W/m^2]
+    file_d02_LWDNTC = parent_dir + '/L1/d02_LWDNTC'				# [W/m^2]
+    file_d02_LWUPBC = parent_dir + '/L1/d02_LWUPBC'				# [W/m^2]
+    file_d02_LWDNBC = parent_dir + '/L1/d02_LWDNBC'				# [W/m^2]
+    file_d02_SWUPTC = parent_dir + '/L1/d02_SWUPTC'				# [W/m^2]
+    file_d02_SWDNTC = parent_dir + '/L1/d02_SWDNTC'				# [W/m^2]
+    file_d02_SWUPBC = parent_dir + '/L1/d02_SWUPBC'				# [W/m^2]
+    file_d02_SWDNBC = parent_dir + '/L1/d02_SWDNBC'				# [W/m^2]
+
+    # Interpolated data 
+    file_d02_U = parent_dir + '/L2/d02_interp_U'	        # [m/s]
+    file_d02_V = parent_dir + '/L2/d02_interp_V'	        # [m/s]
+    file_d02_W = parent_dir + '/L2/d02_interp_W'	        # [m/s]
+    file_d02_QV = parent_dir + '/L2/d02_interp_QV'	        # [kg/kg]
+    file_d02_QC = parent_dir + '/L2/d02_interp_QC'	        # [kg/kg]
+    file_d02_QR = parent_dir + '/L2/d02_interp_QR'	        # [kg/kg]
+    file_d02_QI = parent_dir + '/L2/d02_interp_QI'	        # [kg/kg]
+    file_d02_QS = parent_dir + '/L2/d02_interp_QS'	        # [kg/kg]
+    file_d02_QG = parent_dir + '/L2/d02_interp_QG'	        # [kg/kg]
+    file_d02_CLDFRA = parent_dir + '/L2/d02_interp_CLDFRA'	# 
+    file_d02_H_DIABATIC = parent_dir + '/L2/d02_interp_H_DIABATIC'	        # [K/s]
+    file_d02_LWAll = parent_dir + '/L2/d02_interp_LWAll'	# [K/s]
+    file_d02_LWClear = parent_dir + '/L2/d02_interp_LWClear'# [K/s]
+    file_d02_SWAll = parent_dir + '/L2/d02_interp_SWAll'	# [K/s]
+    file_d02_SWClear = parent_dir + '/L2/d02_interp_SWClear'# [K/s]
+    file_d02_Theta = parent_dir + '/L2/d02_interp_Theta'	# [K]
+
+    ######################################################################################
+
+
+    # Based on the bounds you set above, setup the indicies that will be used throughout
+    time_ind_d02, lat_ind_d02, lon_ind_d02 = isel_ind(file_d02_raw, times, lats, lons)
+
+    # Raw datasets
+    start_time = time.perf_counter()
+
+    ds_d02 = open_ds(file_d02_raw,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    step1_time = time.perf_counter()
+    print('Dataset loaded \N{check mark}', step1_time-start_time, 'seconds')
+
+    # Coordinate dictionaries:
+    step2_time = time.perf_counter()
+    interp_P_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+
+    interp_P_levels_d02 = np.resize(interp_P_levels,(ds_d02.XLAT.shape[2],ds_d02.XLAT.shape[1],len(interp_P_levels)))
+    interp_P_levels_d02 = np.swapaxes(interp_P_levels_d02, 0, 2)
+    d02_coords = dict(
+        XLAT=(('Time','south_north','west_east'),ds_d02.XLAT.values),
+        XLONG=(('Time','south_north','west_east'),ds_d02.XLONG.values),
+        bottom_top=(('bottom_top'),interp_P_levels),
+        XTIME=('Time',ds_d02.XTIME.values),
+        south_north=(('south_north'),ds_d02.XLAT[0,:,0].values),
+        west_east=(('west_east'),ds_d02.XLONG[0,0,:].values)
+        )
+
+    step1_time = time.perf_counter()
+    print('Created coordinate dictionaries \N{check mark}', step1_time-step2_time, 'seconds')
+
+    step2_time = time.perf_counter()
+    #### Figure out where the coast is
+    ## Load Landmask
+    da_d02_LANDMASK = ds_d02['LANDMASK'].compute()
+    da_d02_LANDMASK = da_d02_LANDMASK.assign_coords(without_keys(d02_coords,'bottom_top'))
+
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LANDMASK, start_coord, end_coord, width, dx)
+    # Create distance coordinate
+    distance_d02 = np.linspace(0,dist(start_coord[0], start_coord[1], end_coord[0], end_coord[1]),da_cross_temp.shape[1])
+    mid_cross_ind = int(da_cross_temp.shape[2]/2)	# Find middle cross-section index
+    if da_cross_temp[0,0,mid_cross_ind]==0:     # Figure out if the start is over land or ocean
+        coast_ind = np.where(da_cross_temp[0,:,mid_cross_ind]==1)[0][0]	# First 1 (ocean->land)
+    else:
+        coast_ind = np.where(da_cross_temp[0,:,mid_cross_ind]==0)[0][0]	# First 0 (land->ocean)
+    distance_d02 = distance_d02 - distance_d02[coast_ind]   # Negative values is land
+    step1_time = time.perf_counter()
+    print('Calculated distance measurements \N{check mark}', step1_time-step2_time, 'seconds')
+
+    # Do this to first figure out what the missing data value is
+    ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    fill_value_f8 = ds['U'].max().values      # This is the fill_value meaning missing_data
+
+    ######################################################################################################################################
+    ################# Load in the variables ##############################################################################################
+    ######################################################################################################################################
+
+
+    ##################### 3-D variables ##################################################################################################
+
+    ############ Interpolated zonal winds   [m/s] #############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_U = ds['U'].compute()
+    da_d02_U = da_d02_U.assign_coords(d02_coords)
+    da_d02_U = da_d02_U.where(da_d02_U!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated zonal winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Interpolated Meridional winds   [m/s] ############
+    step2_time = time.perf_counter()
+
+    # d02
+    ds = open_ds(file_d02_V,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_V = ds['V'].compute()
+    da_d02_V = da_d02_V.assign_coords(d02_coords)
+    da_d02_V = da_d02_V.where(da_d02_V!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated meridional winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+
+    ################################ Calculate Normal Wind ################################
+
+    # d02
+    da_u, da_v = rotate_vec(da_d02_U, da_d02_V, theta)
+    ################ Normal Wind - Cross-section Analysis ################
+    da_cross_temp, all_line_coords = cross_section_multi(da_u, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_NormalWind_cross = make_da_cross(da_d02_U, da_cross_temp, 'NormalWind', distance_d02, width, all_line_coords)
+    da_d02_NormalWind_cross.to_netcdf('./d02_cross_NormalWind')
+    # Delete variables after to aliviate memory strain
+    del da_d02_NormalWind_cross, da_d02_U, da_d02_V
+
+    ############ Interpolated Vertical winds   [m/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_W,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_W = ds['W'].compute()
+    da_d02_W = da_d02_W.assign_coords(d02_coords)
+    da_d02_W = da_d02_W.where(da_d02_W!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated vertical winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Vertical Wind - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_W, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_W_cross = make_da_cross(da_d02_W, da_cross_temp, 'W', distance_d02, width, all_line_coords)
+    da_d02_W_cross.to_netcdf('./d02_cross_W')
+    # Delete variables after to aliviate memory strain
+    del da_d02_W_cross, da_d02_W
+
+    ############ Interpolated water vapor mixing ratio  [kg/kg] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QV,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QV = ds['QV'].compute()
+    da_d02_QV = da_d02_QV.assign_coords(d02_coords)
+    da_d02_QV = da_d02_QV.where(da_d02_QV!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated water vapor mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Water Vapor - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QV, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QV_cross = make_da_cross(da_d02_QV, da_cross_temp, 'QV', distance_d02, width, all_line_coords)
+    da_d02_QV_cross.to_netcdf('./d02_cross_QV')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QV_cross, da_d02_QV
+
+    ############ Interpolated cloud water mixing ratio  [kg/kg] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QC = ds['QC'].compute()
+    da_d02_QC = da_d02_QC.assign_coords(d02_coords)
+    da_d02_QC = da_d02_QC.where(da_d02_QC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Cloud water - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QC_cross = make_da_cross(da_d02_QC, da_cross_temp, 'QC', distance_d02, width, all_line_coords)
+    da_d02_QC_cross.to_netcdf('./d02_cross_QC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QC_cross, da_d02_QC
+
+    ############ Interpolated rain water mixing ratio  [kg/kg] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QR,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QR = ds['QR'].compute()
+    da_d02_QR = da_d02_QR.assign_coords(d02_coords)
+    da_d02_QR = da_d02_QR.where(da_d02_QR!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Rain water - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QR, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QR_cross = make_da_cross(da_d02_QR, da_cross_temp, 'QR', distance_d02, width, all_line_coords)
+    da_d02_QR_cross.to_netcdf('./d02_cross_QR')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QR_cross, da_d02_QR
+
+    ############ Interpolated ice mixing ratio  [kg/kg] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QI,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QI = ds['QI'].compute()
+    da_d02_QI = da_d02_QI.assign_coords(d02_coords)
+    da_d02_QI = da_d02_QI.where(da_d02_QI!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Ice mixing ratio - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QI, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QI_cross = make_da_cross(da_d02_QI, da_cross_temp, 'QI', distance_d02, width, all_line_coords)
+    da_d02_QI_cross.to_netcdf('./d02_cross_QI')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QI_cross, da_d02_QI
+
+    ############ Interpolated snow mixing ratio  [kg/kg] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QS,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QS = ds['QS'].compute()
+    da_d02_QS = da_d02_QS.assign_coords(d02_coords)
+    da_d02_QS = da_d02_QS.where(da_d02_QS!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Snow mixing ratio - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QS, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QS_cross = make_da_cross(da_d02_QS, da_cross_temp, 'QS', distance_d02, width, all_line_coords)
+    da_d02_QS_cross.to_netcdf('./d02_cross_QS')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QS_cross, da_d02_QS
+
+    ############ Interpolated graupel mixing ratio  [kg/kg] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QG,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QG = ds['QG'].compute()
+    da_d02_QG = da_d02_QG.assign_coords(d02_coords)
+    da_d02_QG = da_d02_QG.where(da_d02_QG!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Interpolated cloud water mixing ratio loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############################ Graupel mixing ratio - Cross-section Analysis ############################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QG, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QG_cross = make_da_cross(da_d02_QG, da_cross_temp, 'QG', distance_d02, width, all_line_coords)
+    da_d02_QG_cross.to_netcdf('./d02_cross_QG')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QG_cross, da_d02_QG
+
+    ############ Cloud Fraction [0-1] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_CLDFRA,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_CLDFRA = ds['CLDFRA'].compute()
+    da_d02_CLDFRA = da_d02_CLDFRA.assign_coords(d02_coords)
+    da_d02_CLDFRA = da_d02_CLDFRA.where(da_d02_CLDFRA!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Cloud fraction loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Cloud Fraction - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_CLDFRA, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_CLDFRA_cross = make_da_cross(da_d02_CLDFRA, da_cross_temp, 'CLDFRA', distance_d02, width, all_line_coords)
+    da_d02_CLDFRA_cross.to_netcdf('./d02_cross_CLDFRA')
+    # Delete variables after to aliviate memory strain
+    del da_d02_CLDFRA_cross, da_d02_CLDFRA
+
+    ############ Latent Heating [K/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_H_DIABATIC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_H_DIABATIC = ds['H_DIABATIC'].compute()
+    da_d02_H_DIABATIC = da_d02_H_DIABATIC.assign_coords(d02_coords)
+    da_d02_H_DIABATIC = da_d02_H_DIABATIC.where(da_d02_H_DIABATIC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Latent heating loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Latent Heat - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_H_DIABATIC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_H_DIABATIC_cross = make_da_cross(da_d02_H_DIABATIC, da_cross_temp, 'H_DIABATIC', distance_d02, width, all_line_coords)
+    da_d02_H_DIABATIC_cross.to_netcdf('./d02_cross_H_DIABATIC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_H_DIABATIC_cross, da_d02_H_DIABATIC
+
+    ############ Potential Temperature [K] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_Theta,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_Theta = ds['Theta'].compute()
+    da_d02_Theta = da_d02_Theta.assign_coords(d02_coords)
+    da_d02_Theta = da_d02_Theta.where(da_d02_Theta!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Shortwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Potential Temperature/Theta - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_Theta, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_Theta_cross = make_da_cross(da_d02_Theta, da_cross_temp, 'Theta', distance_d02, width, all_line_coords)
+    da_d02_Theta_cross.to_netcdf('./d02_cross_Theta')
+    # Delete variables after to aliviate memory strain
+    del da_d02_Theta_cross, da_d02_Theta
+
+    ############ Longwave Radiative Heating All-Sky [K/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWAll,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWAll = ds['LWAll'].compute()
+    da_d02_LWAll = da_d02_LWAll.assign_coords(d02_coords)
+    da_d02_LWAll = da_d02_LWAll.where(da_d02_LWAll!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Longwave All-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Longwave All - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWAll, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWAll_cross = make_da_cross(da_d02_LWAll, da_cross_temp, 'LWAll', distance_d02, width, all_line_coords)
+    da_d02_LWAll_cross.to_netcdf('./d02_cross_LWAll')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWAll
+
+    ############ Longwave Radiative Heating Clear-Sky [K/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWClear,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWClear = ds['LWClear'].compute()
+    da_d02_LWClear = da_d02_LWClear.assign_coords(d02_coords)
+    da_d02_LWClear = da_d02_LWClear.where(da_d02_LWClear!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Longwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Longwave Clear - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWClear, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWClear_cross = make_da_cross(da_d02_LWClear, da_cross_temp, 'LWClear', distance_d02, width, all_line_coords)
+    da_d02_LWClear_cross.to_netcdf('./d02_cross_LWClear')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWClear
+
+    ################ Longwave CRF - Cross-section Analysis ################
+    # Calculate the CRF
+    da_d02_LWCRF_cross = da_d02_LWAll_cross - da_d02_LWClear_cross
+    da_d02_LWCRF_cross = xr.DataArray(data=da_d02_LWCRF_cross, name='LWCRF')
+    da_d02_LWCRF_cross.to_netcdf('./d02_cross_LWCRF')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWAll_cross, da_d02_LWClear_cross
+
+    ############ Shortwave Radiative Heating All-Sky [K/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWAll,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWAll = ds['SWAll'].compute()
+    da_d02_SWAll = da_d02_SWAll.assign_coords(d02_coords)
+    da_d02_SWAll = da_d02_SWAll.where(da_d02_SWAll!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Shortwave All-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Shortwave All - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWAll, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWAll_cross = make_da_cross(da_d02_SWAll, da_cross_temp, 'SWAll', distance_d02, width, all_line_coords)
+    da_d02_SWAll_cross.to_netcdf('./d02_cross_SWAll')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWAll
+
+    ############ Shortwave Radiative Heating Clear-Sky [K/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWClear,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWClear = ds['SWClear'].compute()
+    da_d02_SWClear = da_d02_SWClear.assign_coords(d02_coords)
+    da_d02_SWClear = da_d02_SWClear.where(da_d02_SWClear!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Shortwave Clear-sky loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Shortwave Clear - Cross-section Analysis ################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWClear, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWClear_cross = make_da_cross(da_d02_SWClear, da_cross_temp, 'SWClear', distance_d02, width, all_line_coords)
+    da_d02_SWClear_cross.to_netcdf('./d02_cross_SWClear')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWClear
+
+    ################ Shortwave CRF - Cross-section Analysis ################
+    # Calculate the CRF
+    da_d02_SWCRF_cross = da_d02_SWAll_cross - da_d02_SWClear_cross
+    da_d02_SWCRF_cross = xr.DataArray(data=da_d02_SWCRF_cross, name='SWCRF')
+    da_d02_SWCRF_cross.to_netcdf('./d02_cross_SWCRF')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWClear_cross, da_d02_SWAll_cross
+
+    ################ Total CRF - Cross-section Analysis ################
+    # Calculate the Total CRF
+    da_d02_TotalCRF_cross = da_d02_SWCRF_cross + da_d02_LWCRF_cross
+    da_d02_TotalCRF_cross = xr.DataArray(data=da_d02_TotalCRF_cross, name='TotalCRF')
+    da_d02_TotalCRF_cross.to_netcdf('./d02_cross_TotalCRF')
+    # Delete variables after to aliviate memory strain
+    del da_d02_TotalCRF_cross, da_d02_SWCRF_cross, da_d02_LWCRF_cross
+
+    #################################################################################################################################################
+    ##################### 2-D variables #############################################################################################################
+    #################################################################################################################################################
+
+    ############ Rain Rate     [mm/hr] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_RR,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_RR = ds['RR'].compute()
+    da_d02_RR = da_d02_RR.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_RR = da_d02_RR.where(da_d02_RR!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Rain Rate - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_RR, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_RR_cross = make_da_cross(da_d02_RR, da_cross_temp, 'RR', distance_d02, width, all_line_coords)
+    da_d02_RR_cross.to_netcdf('./d02_cross_RR')
+    # Delete variables after to aliviate memory strain
+    del da_d02_RR, da_d02_RR_cross
+
+    ############ Surface U Wind     [m/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_U10,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_U10 = ds['U10'].compute()
+    da_d02_U10 = da_d02_U10.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_U10 = da_d02_U10.where(da_d02_U10!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('U10 rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Surface U Wind - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_U10, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_U10_cross = make_da_cross(da_d02_U10, da_cross_temp, 'U10', distance_d02, width, all_line_coords)
+    da_d02_U10_cross.to_netcdf('./d02_cross_U10')
+    # Delete variables after to aliviate memory strain
+    del da_d02_U10, da_d02_U10_cross
+
+    ############ Surface V Wind     [m/s] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_V10,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_V10 = ds['V10'].compute()
+    da_d02_V10 = da_d02_V10.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_V10 = da_d02_V10.where(da_d02_V10!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('V10 rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Surface V Wind - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_V10, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_V10_cross = make_da_cross(da_d02_V10, da_cross_temp, 'V10', distance_d02, width, all_line_coords)
+    da_d02_V10_cross.to_netcdf('./d02_cross_V10')
+    # Delete variables after to aliviate memory strain
+    del da_d02_V10, da_d02_V10_cross
+
+    ################################ Calculate Surface Normal Wind ################################
+    # d02
+    da_u10, da_v10 = rotate_vec(da_d02_U10, da_d02_V10, theta)
+    ################ Normal Wind - Cross-section Analysis ################
+    da_cross_temp, all_line_coords = cross_section_multi(da_u10, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_NormalWind_cross = make_da_cross(da_d02_U10, da_cross_temp, 'NormalWind', distance_d02, width, all_line_coords)
+    da_d02_NormalWind_cross.to_netcdf('./d02_cross_SurfaceNormalWind')
+    # Delete variables after to aliviate memory strain
+    del da_d02_NormalWind_cross, da_d02_U10, da_d02_V10
+
+    ############ Upward Heat Flux at Surface     [W/m^2] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_HFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_HFX = ds['HFX'].compute()
+    da_d02_HFX = da_d02_HFX.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_HFX = da_d02_HFX.where(da_d02_HFX!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Upward Heat Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Upward Heat Flux at Surface - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_HFX, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_HFX_cross = make_da_cross(da_d02_HFX, da_cross_temp, 'HFX', distance_d02, width, all_line_coords)
+    da_d02_HFX_cross.to_netcdf('./d02_cross_HFX')
+    # Delete variables after to aliviate memory strain
+    del da_d02_HFX, da_d02_HFX_cross
+
+
+    ############ Upward Moisture Flux at Surface     [kg/(m^2s^1)] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_QFX,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_QFX = ds['QFX'].compute()
+    da_d02_QFX = da_d02_QFX.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_QFX = da_d02_QFX.where(da_d02_QFX!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Upward Moisture Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Upward Moisture Flux at Surface - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_QFX, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_QFX_cross = make_da_cross(da_d02_QFX, da_cross_temp, 'QFX', distance_d02, width, all_line_coords)
+    da_d02_QFX_cross.to_netcdf('./d02_cross_QFX')
+    # Delete variables after to aliviate memory strain
+    del da_d02_QFX, da_d02_QFX_cross
+
+
+    ############ Latent Heat Flux at Surface		[W/m^2] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LH,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LH = ds['LH'].compute()
+    da_d02_LH = da_d02_LH.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LH = da_d02_LH.where(da_d02_LH!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Latent Heat Flux at Surface loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Latent Heat Flux at Surface - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LH, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LH_cross = make_da_cross(da_d02_LH, da_cross_temp, 'LH', distance_d02, width, all_line_coords)
+    da_d02_LH_cross.to_netcdf('./d02_cross_LH')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LH, da_d02_LH_cross
+
+
+    ############ Temperature at 2m     [K] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_T2,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_T2 = ds['T2'].compute()
+    da_d02_T2 = da_d02_T2.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_T2 = da_d02_T2.where(da_d02_T2!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Temperature at 2m loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Temperature at 2m - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_T2, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_T2_cross = make_da_cross(da_d02_T2, da_cross_temp, 'T2', distance_d02, width, all_line_coords)
+    da_d02_T2_cross.to_netcdf('./d02_cross_T2')
+    # Delete variables after to aliviate memory strain
+    del da_d02_T2, da_d02_T2_cross
+
+
+    ############ Surface Pressure     [hPa] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_PSFC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_PSFC = ds['PSFC'].compute()
+    da_d02_PSFC = da_d02_PSFC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_PSFC = da_d02_PSFC.where(da_d02_PSFC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Surface Pressure loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ Surface Pressure - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_PSFC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_PSFC_cross = make_da_cross(da_d02_PSFC, da_cross_temp, 'PSFC', distance_d02, width, all_line_coords)
+    da_d02_PSFC_cross.to_netcdf('./d02_cross_PSFC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_PSFC, da_d02_PSFC_cross
+
+
+    ############ CAPE     [hPa] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_CAPE,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_CAPE = ds['CAPE'].compute()
+    da_d02_CAPE = da_d02_CAPE.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_CAPE = da_d02_CAPE.where(da_d02_CAPE!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('CAPE loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ CAPE - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_CAPE, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_CAPE_cross = make_da_cross(da_d02_CAPE, da_cross_temp, 'CAPE', distance_d02, width, all_line_coords)
+    da_d02_CAPE_cross.to_netcdf('./d02_cross_CAPE')
+    # Delete variables after to aliviate memory strain
+    del da_d02_CAPE, da_d02_CAPE_cross
+
+
+    ############ CIN     [hPa] ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_CIN,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_CIN = ds['CIN'].compute()
+    da_d02_CIN = da_d02_CIN.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_CIN = da_d02_CIN.where(da_d02_CIN!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('CIN loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ################ CIN - Cross-section Analysis #################
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_CIN, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_CIN_cross = make_da_cross(da_d02_CIN, da_cross_temp, 'CIN', distance_d02, width, all_line_coords)
+    da_d02_CIN_cross.to_netcdf('./d02_cross_CIN')
+    # Delete variables after to aliviate memory strain
+    del da_d02_CIN, da_d02_CIN_cross
+
+    #####################################################################################################################################################
+    ################################ All-sky ############################################################################################################
+    #####################################################################################################################################################
+
+    ############ Load Longwave Upwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWUPT,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWUPT = ds['LWUPT'].compute()
+    da_d02_LWUPT = da_d02_LWUPT.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWUPT = da_d02_LWUPT.where(da_d02_LWUPT!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Upwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPT, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWUPT_cross = make_da_cross(da_d02_LWUPT, da_cross_temp, 'LWUPT', distance_d02, width, all_line_coords)
+    da_d02_LWUPT_cross.to_netcdf('./d02_cross_LWUPT')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWUPT, da_d02_LWUPT_cross
+
+    ############ Load Longwave Downwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWDNT,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWDNT = ds['LWDNT'].compute()
+    da_d02_LWDNT = da_d02_LWDNT.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWDNT = da_d02_LWDNT.where(da_d02_LWDNT!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Downwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNT, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWDNT_cross = make_da_cross(da_d02_LWDNT, da_cross_temp, 'LWDNT', distance_d02, width, all_line_coords)
+    da_d02_LWDNT_cross.to_netcdf('./d02_cross_LWDNT')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWDNT, da_d02_LWDNT_cross
+
+    ############ Load Longwave Upwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWUPB = ds['LWUPB'].compute()
+    da_d02_LWUPB = da_d02_LWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWUPB = da_d02_LWUPB.where(da_d02_LWUPB!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Upwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPB, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWUPB_cross = make_da_cross(da_d02_LWUPB, da_cross_temp, 'LWUPB', distance_d02, width, all_line_coords)
+    da_d02_LWUPB_cross.to_netcdf('./d02_cross_LWUPB')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWUPB, da_d02_LWUPB_cross
+
+    ############ Load Longwave Downwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWDNB = ds['LWDNB'].compute()
+    da_d02_LWDNB = da_d02_LWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWDNB = da_d02_LWDNB.where(da_d02_LWDNB!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Downwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNB, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWDNB_cross = make_da_cross(da_d02_LWDNB, da_cross_temp, 'LWDNB', distance_d02, width, all_line_coords)
+    da_d02_LWDNB_cross.to_netcdf('./d02_cross_LWDNB')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWDNB, da_d02_LWDNB_cross
+
+    ############ Load Shortwave Upwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWUPT,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWUPT = ds['SWUPT'].compute()
+    da_d02_SWUPT = da_d02_SWUPT.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWUPT = da_d02_SWUPT.where(da_d02_SWUPT!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Upwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPT, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWUPT_cross = make_da_cross(da_d02_SWUPT, da_cross_temp, 'SWUPT', distance_d02, width, all_line_coords)
+    da_d02_SWUPT_cross.to_netcdf('./d02_cross_SWUPT')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWUPT, da_d02_SWUPT_cross
+
+    ############ Load Shortwave Downwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWDNT,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWDNT = ds['SWDNT'].compute()
+    da_d02_SWDNT = da_d02_SWDNT.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWDNT = da_d02_SWDNT.where(da_d02_SWDNT!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Downwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNT, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWDNT_cross = make_da_cross(da_d02_SWDNT, da_cross_temp, 'SWDNT', distance_d02, width, all_line_coords)
+    da_d02_SWDNT_cross.to_netcdf('./d02_cross_SWDNT')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWDNT, da_d02_SWDNT_cross
+
+    ############ Load Shortwave Upwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWUPB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWUPB = ds['SWUPB'].compute()
+    da_d02_SWUPB = da_d02_SWUPB.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWUPB = da_d02_SWUPB.where(da_d02_SWUPB!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Upwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPB, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWUPB_cross = make_da_cross(da_d02_SWUPB, da_cross_temp, 'SWUPB', distance_d02, width, all_line_coords)
+    da_d02_SWUPB_cross.to_netcdf('./d02_cross_SWUPB')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWUPB, da_d02_SWUPB_cross
+
+    ############ Load Shortwave Downwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWDNB,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWDNB = ds['SWDNB'].compute()
+    da_d02_SWDNB = da_d02_SWDNB.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWDNB = da_d02_SWDNB.where(da_d02_SWDNB!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Downwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNB, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWDNB_cross = make_da_cross(da_d02_SWDNB, da_cross_temp, 'SWDNB', distance_d02, width, all_line_coords)
+    da_d02_SWDNB_cross.to_netcdf('./d02_cross_SWDNB')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWDNB, da_d02_SWDNB_cross
+
+    #######################################################################################################################################################
+    ################################ Clear-sky ############################################################################################################
+    #######################################################################################################################################################
+
+    ############ Load Longwave Upwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWUPTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWUPTC = ds['LWUPTC'].compute()
+    da_d02_LWUPTC = da_d02_LWUPTC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWUPTC = da_d02_LWUPTC.where(da_d02_LWUPTC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Upwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPTC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWUPTC_cross = make_da_cross(da_d02_LWUPTC, da_cross_temp, 'LWUPTC', distance_d02, width, all_line_coords)
+    da_d02_LWUPTC_cross.to_netcdf('./d02_cross_LWUPTC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWUPTC, da_d02_LWUPTC_cross
+
+    ############ Load Longwave Downwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWDNTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWDNTC = ds['LWDNTC'].compute()
+    da_d02_LWDNTC = da_d02_LWDNTC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWDNTC = da_d02_LWDNTC.where(da_d02_LWDNTC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Downwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNTC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWDNTC_cross = make_da_cross(da_d02_LWDNTC, da_cross_temp, 'LWDNTC', distance_d02, width, all_line_coords)
+    da_d02_LWDNTC_cross.to_netcdf('./d02_cross_LWDNTC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWDNTC, da_d02_LWDNTC_cross
+
+    ############ Load Longwave Upwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWUPBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWUPBC = ds['LWUPBC'].compute()
+    da_d02_LWUPBC = da_d02_LWUPBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWUPBC = da_d02_LWUPBC.where(da_d02_LWUPBC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Upwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWUPBC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWUPBC_cross = make_da_cross(da_d02_LWUPBC, da_cross_temp, 'LWUPBC', distance_d02, width, all_line_coords)
+    da_d02_LWUPBC_cross.to_netcdf('./d02_cross_LWUPBC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWUPBC, da_d02_LWUPBC_cross
+
+    ############ Load Longwave Downwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_LWDNBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_LWDNBC = ds['LWDNBC'].compute()
+    da_d02_LWDNBC = da_d02_LWDNBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_LWDNBC = da_d02_LWDNBC.where(da_d02_LWDNBC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Longwave Downwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_LWDNBC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_LWDNBC_cross = make_da_cross(da_d02_LWDNBC, da_cross_temp, 'LWDNBC', distance_d02, width, all_line_coords)
+    da_d02_LWDNBC_cross.to_netcdf('./d02_cross_LWDNBC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_LWDNBC, da_d02_LWDNBC_cross
+
+    ############ Load Shortwave Upwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWUPTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWUPTC = ds['SWUPTC'].compute()
+    da_d02_SWUPTC = da_d02_SWUPTC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWUPTC = da_d02_SWUPTC.where(da_d02_SWUPTC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Upwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPTC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWUPTC_cross = make_da_cross(da_d02_SWUPTC, da_cross_temp, 'SWUPTC', distance_d02, width, all_line_coords)
+    da_d02_SWUPTC_cross.to_netcdf('./d02_cross_SWUPTC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWUPTC, da_d02_SWUPTC_cross
+
+    ############ Load Shortwave Downwelling at TOA ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWDNTC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWDNTC = ds['SWDNTC'].compute()
+    da_d02_SWDNTC = da_d02_SWDNTC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWDNTC = da_d02_SWDNTC.where(da_d02_SWDNTC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Downwelling at TOA ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNTC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWDNTC_cross = make_da_cross(da_d02_SWDNTC, da_cross_temp, 'SWDNTC', distance_d02, width, all_line_coords)
+    da_d02_SWDNTC_cross.to_netcdf('./d02_cross_SWDNTC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWDNTC, da_d02_SWDNTC_cross
+
+    ############ Load Shortwave Upwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWUPBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWUPBC = ds['SWUPBC'].compute()
+    da_d02_SWUPBC = da_d02_SWUPBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWUPBC = da_d02_SWUPBC.where(da_d02_SWUPBC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Upwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWUPBC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWUPBC_cross = make_da_cross(da_d02_SWUPBC, da_cross_temp, 'SWUPBC', distance_d02, width, all_line_coords)
+    da_d02_SWUPBC_cross.to_netcdf('./d02_cross_SWUPBC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWUPBC, da_d02_SWUPBC_cross
+
+    ############ Load Shortwave Downwelling at SFC ############
+    step2_time = time.perf_counter()
+    # d02
+    ds = open_ds(file_d02_SWDNBC,time_ind_d02,lat_ind_d02,lon_ind_d02)
+    da_d02_SWDNBC = ds['SWDNBC'].compute()
+    da_d02_SWDNBC = da_d02_SWDNBC.assign_coords(without_keys(d02_coords,'bottom_top'))
+    da_d02_SWDNBC = da_d02_SWDNBC.where(da_d02_SWDNBC!=fill_value_f8)    # Change fill_value points to nans
+
+    step1_time = time.perf_counter()
+    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+
+    ############ Cross-sectional analysis of Shortwave Downwelling at SFC ############
+    # d02
+    da_cross_temp, all_line_coords = cross_section_multi(da_d02_SWDNBC, start_coord, end_coord, width, dx)
+    # Create da with coordinates
+    da_d02_SWDNBC_cross = make_da_cross(da_d02_SWDNBC, da_cross_temp, 'SWDNBC', distance_d02, width, all_line_coords)
+    da_d02_SWDNBC_cross.to_netcdf('./d02_cross_SWDNBC')
+    # Delete variables after to aliviate memory strain
+    del da_d02_SWDNBC, da_d02_SWDNBC_cross
+
+    
 
