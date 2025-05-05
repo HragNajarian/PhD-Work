@@ -25,6 +25,7 @@
 
 import numpy as np
 import xarray as xr
+import wrf
 from math import cos, asin, sqrt, pi, atan
 import time
 import os
@@ -322,6 +323,7 @@ parent_dir = sys.argv[1]
 
 # Assign the correct location directory depending on where you're trying to cross-section
 local_dir = ['/L3/Sumatra_mid_central','/L3/Sumatra_northwest','/L3/Borneo_northwest']
+# local_dir = ['/L3/Sumatra_northwest','/L3/Borneo_northwest']
 # List of dirs:
     # /L3/Sumatra_mid_central
     # /L3/Sumatra_northwest
@@ -360,7 +362,7 @@ for loc_dir in local_dir:
     # Find out what the angle of the cross-section is
     theta = calculate_angle_between_points(start_coord, end_coord)    # Degrees
 
-    times = [np.datetime64('2015-12-09T12'), np.datetime64('2015-12-20T00')]
+    times = [np.datetime64('2015-12-09T12'), np.datetime64('2015-12-20T12')]
     lats = [min(start_coord[0],end_coord[0])-width, max(start_coord[0],end_coord[0])+width]
     lons = [min(start_coord[1],end_coord[1])-width, max(start_coord[1],end_coord[1])+width]
 
@@ -470,8 +472,7 @@ for loc_dir in local_dir:
     print('Calculated distance measurements \N{check mark}', step1_time-step2_time, 'seconds')
 
     # Do this to first figure out what the missing data value is
-    ds = open_ds(file_d02_U,time_ind_d02,lat_ind_d02,lon_ind_d02)
-    fill_value_f8 = ds['U'].max().values      # This is the fill_value meaning missing_data
+    fill_value_f8 = wrf.default_fill(np.float32)      # This is the fill_value meaning missing_data
 
     ######################################################################################################################################
     ################# Load in the variables ##############################################################################################
@@ -502,7 +503,6 @@ for loc_dir in local_dir:
 
     step1_time = time.perf_counter()
     print('Interpolated meridional winds loaded \N{check mark}', step1_time-step2_time, 'seconds')
-
 
     ################################ Calculate Normal Wind ################################
 
@@ -862,7 +862,7 @@ for loc_dir in local_dir:
     da_d02_U10_cross = make_da_cross(da_d02_U10, da_cross_temp, 'U10', distance_d02, width, all_line_coords)
     da_d02_U10_cross.to_netcdf('./d02_cross_U10')
     # Delete variables after to aliviate memory strain
-    del da_d02_U10, da_d02_U10_cross
+    del da_d02_U10_cross
 
     ############ Surface V Wind     [m/s] ############
     step2_time = time.perf_counter()
@@ -882,7 +882,7 @@ for loc_dir in local_dir:
     da_d02_V10_cross = make_da_cross(da_d02_V10, da_cross_temp, 'V10', distance_d02, width, all_line_coords)
     da_d02_V10_cross.to_netcdf('./d02_cross_V10')
     # Delete variables after to aliviate memory strain
-    del da_d02_V10, da_d02_V10_cross
+    del da_d02_V10_cross
 
     ################################ Calculate Surface Normal Wind ################################
     # d02
@@ -1054,7 +1054,7 @@ for loc_dir in local_dir:
     da_d02_LWUPT = da_d02_LWUPT.where(da_d02_LWUPT!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Upwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Upwelling at TOA ############
     # d02
@@ -1074,7 +1074,7 @@ for loc_dir in local_dir:
     da_d02_LWDNT = da_d02_LWDNT.where(da_d02_LWDNT!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Downwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Downwelling at TOA ############
     # d02
@@ -1094,7 +1094,7 @@ for loc_dir in local_dir:
     da_d02_LWUPB = da_d02_LWUPB.where(da_d02_LWUPB!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Upwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Upwelling at SFC ############
     # d02
@@ -1114,7 +1114,7 @@ for loc_dir in local_dir:
     da_d02_LWDNB = da_d02_LWDNB.where(da_d02_LWDNB!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Downwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Downwelling at SFC ############
     # d02
@@ -1134,7 +1134,7 @@ for loc_dir in local_dir:
     da_d02_SWUPT = da_d02_SWUPT.where(da_d02_SWUPT!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Upwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Upwelling at TOA ############
     # d02
@@ -1154,7 +1154,7 @@ for loc_dir in local_dir:
     da_d02_SWDNT = da_d02_SWDNT.where(da_d02_SWDNT!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Downwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Downwelling at TOA ############
     # d02
@@ -1174,7 +1174,7 @@ for loc_dir in local_dir:
     da_d02_SWUPB = da_d02_SWUPB.where(da_d02_SWUPB!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Upwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Upwelling at SFC ############
     # d02
@@ -1194,7 +1194,7 @@ for loc_dir in local_dir:
     da_d02_SWDNB = da_d02_SWDNB.where(da_d02_SWDNB!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Downwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Downwelling at SFC ############
     # d02
@@ -1218,7 +1218,7 @@ for loc_dir in local_dir:
     da_d02_LWUPTC = da_d02_LWUPTC.where(da_d02_LWUPTC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Upwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Upwelling at TOA ############
     # d02
@@ -1238,7 +1238,7 @@ for loc_dir in local_dir:
     da_d02_LWDNTC = da_d02_LWDNTC.where(da_d02_LWDNTC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Downwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Downwelling at TOA ############
     # d02
@@ -1258,7 +1258,7 @@ for loc_dir in local_dir:
     da_d02_LWUPBC = da_d02_LWUPBC.where(da_d02_LWUPBC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Upwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Upwelling at SFC ############
     # d02
@@ -1278,7 +1278,7 @@ for loc_dir in local_dir:
     da_d02_LWDNBC = da_d02_LWDNBC.where(da_d02_LWDNBC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Longwave Downwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Longwave Downwelling at SFC ############
     # d02
@@ -1298,7 +1298,7 @@ for loc_dir in local_dir:
     da_d02_SWUPTC = da_d02_SWUPTC.where(da_d02_SWUPTC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Upwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Upwelling at TOA ############
     # d02
@@ -1318,7 +1318,7 @@ for loc_dir in local_dir:
     da_d02_SWDNTC = da_d02_SWDNTC.where(da_d02_SWDNTC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Downwelling at TOA loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Downwelling at TOA ############
     # d02
@@ -1338,7 +1338,7 @@ for loc_dir in local_dir:
     da_d02_SWUPBC = da_d02_SWUPBC.where(da_d02_SWUPBC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Upwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Upwelling at SFC ############
     # d02
@@ -1358,7 +1358,7 @@ for loc_dir in local_dir:
     da_d02_SWDNBC = da_d02_SWDNBC.where(da_d02_SWDNBC!=fill_value_f8)    # Change fill_value points to nans
 
     step1_time = time.perf_counter()
-    print('Rain rates loaded \N{check mark}', step1_time-step2_time, 'seconds')
+    print('Shortwave Downwelling at SFC loaded \N{check mark}', step1_time-step2_time, 'seconds')
 
     ############ Cross-sectional analysis of Shortwave Downwelling at SFC ############
     # d02
@@ -1368,6 +1368,4 @@ for loc_dir in local_dir:
     da_d02_SWDNBC_cross.to_netcdf('./d02_cross_SWDNBC')
     # Delete variables after to aliviate memory strain
     del da_d02_SWDNBC, da_d02_SWDNBC_cross
-
-    
 
