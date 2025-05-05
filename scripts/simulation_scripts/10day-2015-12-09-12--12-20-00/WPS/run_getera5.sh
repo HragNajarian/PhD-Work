@@ -5,7 +5,7 @@ mamba activate get_era5
 
 
 DATE1=20151209
-DATE2=20151220
+DATE2=20151221
 Nort=21
 West=79
 Sout=-21
