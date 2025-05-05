@@ -45,6 +45,7 @@ export SACCT_FORMAT=JobID,JobName,Partition,AllocCPUS,Start,End,Elapsed,State,Ex
 alias del="rm -rf rsl*"
 alias topme="top -u hragnajarian"
 alias squeueme="squeue -u hragnajarian"
+alias scancelall="scancel -u hragnajarian"
 alias ta5="tail -n 500"
 alias he5="head -n 500"
 alias sinfome="sinfo -p radclouds"
