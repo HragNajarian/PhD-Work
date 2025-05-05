@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --job-name=job_real
+#SBATCH --dependency=afterok:
+#SBATCH -p radclouds
+#SBATCH -N 1
+#SBATCH -n 56
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855
+#SBATCH --exclusive
+#SBATCH --output=outbatch.%j.txt
+#SBATCH --error=outbatch.%j.txt
+#SBATCH -t 6:00:00 # max job run time HH:MM:SS
+
+cp $1 $2	# Update the namelist.input
+
+module purge
+source bashrc_wrf
+
+mpirun ./real.exe
+
