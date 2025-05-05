@@ -188,13 +188,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QVAPOR'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['QVAPOR'].__dict__)
             # Dataset variable to read from
-            QV = dataset.variables['QVAPOR']    # Water vapor mixing ratio [kg/kg]
+            variable = dataset.variables['QVAPOR']    # Water vapor mixing ratio [kg/kg]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(QV[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -215,13 +215,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QCLOUD'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['QCLOUD'].__dict__)
             # Dataset variable to read from
-            QC = dataset.variables['QCLOUD']    # Water vapor mixing ratio [kg/kg]
+            variable = dataset.variables['QCLOUD']    # Water vapor mixing ratio [kg/kg]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(QC[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -242,13 +242,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QRAIN'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['QRAIN'].__dict__)
             # Dataset variable to read from
-            QR = dataset.variables['QRAIN']    # Water vapor mixing ratio [kg/kg]
+            variable = dataset.variables['QRAIN']    # Water vapor mixing ratio [kg/kg]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(QR[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -269,13 +269,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QICE'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['QICE'].__dict__)
             # Dataset variable to read from
-            QI = dataset.variables['QICE']    # Water vapor mixing ratio [kg/kg]
+            variable = dataset.variables['QICE']    # Water vapor mixing ratio [kg/kg]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(QI[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -296,13 +296,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QSNOW'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['QSNOW'].__dict__)
             # Dataset variable to read from
-            QS = dataset.variables['QSNOW']    # Water vapor mixing ratio [kg/kg]
+            variable = dataset.variables['QSNOW']    # Water vapor mixing ratio [kg/kg]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(QS[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -323,13 +323,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QGRAUP'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['QGRAUP'].__dict__)
             # Dataset variable to read from
-            QG = dataset.variables['QGRAUP']    # Water vapor mixing ratio [kg/kg]
+            variable = dataset.variables['QGRAUP']    # Water vapor mixing ratio [kg/kg]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(QG[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -350,13 +350,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['CLDFRA'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['CLDFRA'].__dict__)
             # Dataset variable to read from
-            CLDFRA = dataset.variables['CLDFRA']    # Cloud Fraction
+            variable = dataset.variables['CLDFRA']    # Cloud Fraction
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(CLDFRA[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -377,13 +377,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['T'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['T'].__dict__)
             # Dataset variable to read from
-            Theta = dataset.variables['T']    # Potential Temperature [K]
+            variable = dataset.variables['T']    # Potential Temperature [K]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(Theta[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:] + 300   # Add 300 to convert perturb theta to theta
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -404,13 +404,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['H_DIABATIC'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['H_DIABATIC'].__dict__)
             # Dataset variable to read from
-            H_DIABATIC = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
+            variable = dataset.variables['H_DIABATIC']    # Latent Heating [K/s]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(H_DIABATIC[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -431,13 +431,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['RTHRATSWC'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['RTHRATSWC'].__dict__)
             # Dataset variable to read from
-            SWClear = dataset.variables['RTHRATSWC']    # SW Radiative heating CLEAR SKY [K/s]
+            variable = dataset.variables['RTHRATSWC']    # SW Radiative heating CLEAR SKY [K/s]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(SWClear[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -458,13 +458,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['RTHRATSW'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['RTHRATSW'].__dict__)
             # Dataset variable to read from
-            SWAll = dataset.variables['RTHRATSW']    # SW Radiative heating ALL SKY [K/s]
+            variable = dataset.variables['RTHRATSW']    # SW Radiative heating ALL SKY [K/s]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(SWAll[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -485,13 +485,13 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['RTHRATLWC'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['RTHRATLWC'].__dict__)
             # Dataset variable to read from
-            LWClear = dataset.variables['RTHRATLWC']    # LW Radiative heating CLEAR SKY [K/s]
+            variable = dataset.variables['RTHRATLWC']    # LW Radiative heating CLEAR SKY [K/s]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(LWClear[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
@@ -512,17 +512,20 @@ def interp_variable(input_file, pressure_file, variable_name, output_dir, vertic
             output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['RTHRATLW'].dimensions)  # 'f4' == float32
             output_variable.setncatts(dataset.variables['RTHRATLW'].__dict__)
             # Dataset variable to read from
-            LWAll = dataset.variables['RTHRATLW']    # LW Radiative heating ALL SKY [K/s]
+            variable = dataset.variables['RTHRATLW']    # LW Radiative heating ALL SKY [K/s]
             # Make sure the fill value is consistent as you move forward
                 # wrf.getvar => 'u8' fill value (8-bit unisgned integer)
                 # wrf.interp => 'f8' fill value (64-bit float)
                 # default netCDF4 => 'f4' fill value (32-bit float)
             for t in range(dataset.dimensions['Time'].size):
-                interp_variable = wrf.interplevel(LWAll[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
+                interp_variable = wrf.interplevel(variable[t,...], P[t,...], vertical_levels, meta=False, missing=wrf.default_fill(np.float32))
                 output_variable[t,...] = interp_variable[:]
             # Make sure you close the input and output files at the end
             output_dataset.close()
 
+        # Delete variable to make space
+        del variable, interp_variable
+        
     dataset.close()
     return
 
@@ -549,8 +552,8 @@ pressure_file_d02 = parent_dir + '/L1/d02_P'
 # Output to level 2 directory:
 output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 # Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
-# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
 variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+
 
 # Declare the vertial levels you want to interpolate:
 # vertical_levels = np.array(1000)
@@ -613,100 +616,100 @@ interp_variable(input_file_d02, pressure_file_d02, variable_name, output_dir, ve
 # In[5]:
 
 
-# Function to layer weighted average cloud fraction due to uneven vertical grid spacing.
-def layer_weighted_average(ds_CLDFRA, lower_layer, upper_layer, vertical_levels):
+# # Function to layer weighted average cloud fraction due to uneven vertical grid spacing.
+# def layer_weighted_average(ds_CLDFRA, lower_layer, upper_layer, vertical_levels):
 	
-	# Create a mask that include the layers between, turns np.arrays into a np.ma.array
-	mask = ((vertical_levels<=lower_layer)&(vertical_levels>=upper_layer))
-	# Isolate those layers
-	variable = np.array(ds_CLDFRA[:,(mask),:,:])	# 2nd dimension must be the P/z dimension
-	# Remove values that are >1 (CLDFRA cannot be >1)
-	variable = np.where(variable>1, np.nan ,variable)
-	# Remove the upper layer
-	variable = variable[:,:-1,:,:]
-	# Calculate the pressure differences between layers
-	dp = np.array(np.diff(vertical_levels[mask], n=1, axis=0))
-	# Expand dp into the shape of variable
-	dp = dp.reshape((1,-1,1,1))
-	dp = np.broadcast_to(dp, variable.shape)
-	# Remove dp values if variable is nan at that pressure layer. This means np.nansum(dp, axis=1) is not constant over all grid points
-	dp = np.where(np.isnan(variable), np.nan, dp)
-	# Multiple the variable based on the pressure differences, then divide by the total pressure layer difference, and then sum over the P/z layer
-	variable = np.nansum((variable * dp), axis=1) / (np.nansum(dp, axis=1))
-	# Convert masked array into just array
-	variable = np.array(variable)
+# 	# Create a mask that include the layers between, turns np.arrays into a np.ma.array
+# 	mask = ((vertical_levels<=lower_layer)&(vertical_levels>=upper_layer))
+# 	# Isolate those layers
+# 	variable = np.array(ds_CLDFRA[:,(mask),:,:])	# 2nd dimension must be the P/z dimension
+# 	# Remove values that are >1 (CLDFRA cannot be >1)
+# 	variable = np.where(variable>1, np.nan ,variable)
+# 	# Remove the upper layer
+# 	variable = variable[:,:-1,:,:]
+# 	# Calculate the pressure differences between layers
+# 	dp = np.array(np.diff(vertical_levels[mask], n=1, axis=0))
+# 	# Expand dp into the shape of variable
+# 	dp = dp.reshape((1,-1,1,1))
+# 	dp = np.broadcast_to(dp, variable.shape)
+# 	# Remove dp values if variable is nan at that pressure layer. This means np.nansum(dp, axis=1) is not constant over all grid points
+# 	dp = np.where(np.isnan(variable), np.nan, dp)
+# 	# Multiple the variable based on the pressure differences, then divide by the total pressure layer difference, and then sum over the P/z layer
+# 	variable = np.nansum((variable * dp), axis=1) / (np.nansum(dp, axis=1))
+# 	# Convert masked array into just array
+# 	variable = np.array(variable)
 
-	return variable
+# 	return variable
 
-# Declare vertical levels that you've used when interpolating
-vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+# # Declare vertical levels that you've used when interpolating
+# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
-	# Control where icloud=1
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00'
-raw_folder_d02 = '/L2/d02_interp_CLDFRA'
-file_name = 'd02'
-	# NCRF where icloud=0
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
-# raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
-# file_name = 'd02_sunrise'
+# 	# Control where icloud=1
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00'
+# raw_folder_d02 = '/L2/d02_interp_CLDFRA'
+# file_name = 'd02'
+# 	# NCRF where icloud=0
+# # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# # raw_folder_d02 = '/L2/d02_sunrise_interp_CLDFRA'
+# # file_name = 'd02_sunrise'
 
-output_dir = parent_dir + '/L1/'
-input_file_d02 = parent_dir + raw_folder_d02
-dataset = nc.Dataset(input_file_d02, 'r')
-# Assign the variable
-ds_CLDFRA = dataset.variables['CLDFRA']
-
-
-## Low Cloud Fraction [1000-700 hPa]
-variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=1000, upper_layer=680, vertical_levels=vertical_levels)
-# Create new .nc file
-output_dataset = nc.Dataset(output_dir + file_name + '_LowCLDFRA', 'w', clobber=True)
-output_dataset.setncatts(dataset.__dict__)
-# Create the dimensions
-for dim_name, dim in dataset.dimensions.items():
-	output_dataset.createDimension(dim_name, len(dim))
-# Create the variable, set attributes, and copy the variable into the new nc file
-temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
-temp_dimensions.remove("bottom_top")
-temp_dimensions = tuple(temp_dimensions)
-output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
-output_variable[:] = variable[:]	# not a large variable so no need to loop
-output_dataset.close()
-print('Low cloud fraction uploaded')
+# output_dir = parent_dir + '/L1/'
+# input_file_d02 = parent_dir + raw_folder_d02
+# dataset = nc.Dataset(input_file_d02, 'r')
+# # Assign the variable
+# ds_CLDFRA = dataset.variables['CLDFRA']
 
 
-## Mid Cloud Fraction [700-450 hPa]
-variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=680, upper_layer=440, vertical_levels=vertical_levels)
-# Create new .nc file
-output_dataset = nc.Dataset(output_dir + file_name + '_MidCLDFRA', 'w', clobber=True)
-output_dataset.setncatts(dataset.__dict__)
-# Create the dimensions
-for dim_name, dim in dataset.dimensions.items():
-	output_dataset.createDimension(dim_name, len(dim))
-# Create the variable, set attributes, and copy the variable into the new nc file
-temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
-temp_dimensions.remove("bottom_top")
-temp_dimensions = tuple(temp_dimensions)
-output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
-output_variable[:] = variable[:]	# not a large variable so no need to loop
-output_dataset.close()
-print('Mid cloud fraction uploaded')
+# ## Low Cloud Fraction [1000-700 hPa]
+# variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=1000, upper_layer=680, vertical_levels=vertical_levels)
+# # Create new .nc file
+# output_dataset = nc.Dataset(output_dir + file_name + '_LowCLDFRA', 'w', clobber=True)
+# output_dataset.setncatts(dataset.__dict__)
+# # Create the dimensions
+# for dim_name, dim in dataset.dimensions.items():
+# 	output_dataset.createDimension(dim_name, len(dim))
+# # Create the variable, set attributes, and copy the variable into the new nc file
+# temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+# temp_dimensions.remove("bottom_top")
+# temp_dimensions = tuple(temp_dimensions)
+# output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
+# output_variable[:] = variable[:]	# not a large variable so no need to loop
+# output_dataset.close()
+# print('Low cloud fraction uploaded')
 
 
-## High Cloud Fraction [450-200 hPa]
-variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=440, upper_layer=150, vertical_levels=vertical_levels)
-# Create new .nc file
-output_dataset = nc.Dataset(output_dir + file_name + '_HighCLDFRA', 'w', clobber=True)
-output_dataset.setncatts(dataset.__dict__)
-# Create the dimensions
-for dim_name, dim in dataset.dimensions.items():
-	output_dataset.createDimension(dim_name, len(dim))
-# Create the variable, set attributes, and copy the variable into the new nc file
-temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
-temp_dimensions.remove("bottom_top")
-temp_dimensions = tuple(temp_dimensions)
-output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
-output_variable[:] = variable[:]	# not a large variable so no need to loop
-output_dataset.close()
-print('High cloud fraction uploaded')
+# ## Mid Cloud Fraction [700-450 hPa]
+# variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=680, upper_layer=440, vertical_levels=vertical_levels)
+# # Create new .nc file
+# output_dataset = nc.Dataset(output_dir + file_name + '_MidCLDFRA', 'w', clobber=True)
+# output_dataset.setncatts(dataset.__dict__)
+# # Create the dimensions
+# for dim_name, dim in dataset.dimensions.items():
+# 	output_dataset.createDimension(dim_name, len(dim))
+# # Create the variable, set attributes, and copy the variable into the new nc file
+# temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+# temp_dimensions.remove("bottom_top")
+# temp_dimensions = tuple(temp_dimensions)
+# output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
+# output_variable[:] = variable[:]	# not a large variable so no need to loop
+# output_dataset.close()
+# print('Mid cloud fraction uploaded')
+
+
+# ## High Cloud Fraction [450-200 hPa]
+# variable = layer_weighted_average(ds_CLDFRA=ds_CLDFRA, lower_layer=440, upper_layer=150, vertical_levels=vertical_levels)
+# # Create new .nc file
+# output_dataset = nc.Dataset(output_dir + file_name + '_HighCLDFRA', 'w', clobber=True)
+# output_dataset.setncatts(dataset.__dict__)
+# # Create the dimensions
+# for dim_name, dim in dataset.dimensions.items():
+# 	output_dataset.createDimension(dim_name, len(dim))
+# # Create the variable, set attributes, and copy the variable into the new nc file
+# temp_dimensions = list(dataset.variables['CLDFRA'].dimensions)	# For some reason variable.dimensions wasn't working, this is a work around.
+# temp_dimensions.remove("bottom_top")
+# temp_dimensions = tuple(temp_dimensions)
+# output_variable = output_dataset.createVariable('CLDFRA', 'f4', temp_dimensions)
+# output_variable[:] = variable[:]	# not a large variable so no need to loop
+# output_dataset.close()
+# print('High cloud fraction uploaded')
 
