@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --job-name=job_master
 #SBATCH -p radclouds
 #SBATCH -N 1
 #SBATCH -n 1
@@ -15,6 +16,7 @@
 	# 4) Repeat...
 
 # This .job shall be located within the WRF/run directory.
+
 # If you are using restart files, make sure the restart files are in the WRF/run directory.
 
 # Declare the parent dir:
