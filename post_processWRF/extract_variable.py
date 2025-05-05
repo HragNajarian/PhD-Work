@@ -17,7 +17,7 @@ Date: June 2023
 	# jupyter nbconvert extract_variable.ipynb --to python
 
 
-# In[2]:
+# In[1]:
 
 
 # Purpose: Extract important variables from a stitched WRFout file and 
@@ -95,6 +95,7 @@ Date: June 2023
 # input_file_d02 = parent_dir + '/raw/d02'  # Path to the raw input netCDF file
 # output_dir = parent_dir + '/L1/'          # Path to the directory with variable specific files
 # variable_name = ['P','RR','U']            # Declare the variables write into .nc files
+# ctrl_file = '/path/to/ctrl/file'
 # Call the function:
 # extract_variable(input_file_d01, variable_name, output_dir)
 ##############################################################################
@@ -106,7 +107,7 @@ import sys
 
 ##############################################################################
 
-def extract_variable(input_file, variable_name, output_dir, file_name):
+def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file):
     # Open the input netCDF file
 	dataset = nc.Dataset(input_file, 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
 
@@ -436,9 +437,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 			elif (input_file[-3:]=='ise' or input_file[-3:]=='set'):# d02_sunr(ise) or d02_sun(set)
 				R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
-					# Load in the control data 
-				cntl_file = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/raw/d02'
-				dataset_cntl = nc.Dataset(cntl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+				dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
 				R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				# Select datasets over the same times
 				start_ind, end_ind = np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][0])[0][0], np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][-1])[0][0]
@@ -468,13 +467,11 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 				dataset_cntl.close()
 
 			# This file retains the entire simulation period
-			elif (input_file[-3:]=='ens' or input_file[-3:]=='set'):
+			elif (input_file[-3:]=='ens'):
 				R_accum = dataset.variables['RAINNC']				# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				RR = R_accum[:,1:] - R_accum[:,:-1]					# Take the difference to make it rain rate [mm/dt]
 				## Make RR values at the start of each simulation the same as the control
-					# Load in the control data 
-				cntl_file = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/raw/d02'
-				dataset_cntl = nc.Dataset(cntl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+				dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
 				R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				# Find out the matching start times of the simulations with control
 				itter = 0
@@ -1014,16 +1011,15 @@ def extract_variable(input_file, variable_name, output_dir, file_name):
 # In[ ]:
 
 
-# Pick the main folder:
-# parent_dir = '/where/your/wrfoutfiles/exist'
+## Pick the main folder:
+	# i.e. parent_dir = '/where/your/wrfoutfiles/exist'
 parent_dir = sys.argv[1]
-
 # Control where icloud=1
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
 # NCRF where icloud=0
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
 
-# Pick the raw folders:
+## Pick the raw folders:
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
@@ -1032,24 +1028,31 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 # 	# CRF Off
 # raw_folder_d02 = '/raw/d02_sunrise'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
-# Output to level 1 directory:
+## Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
-# Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2' 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
 
-# Call on your function:
+## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10', 'HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+# variable_name = ['Q2', 'U10']
+
+## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
+# ctrl_file_d01 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-12-09-12--12-20-00/raw/d01'
+ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-12-09-12--12-20-00/raw/d02'
+
+## Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
-extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:])
+extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:], ctrl_file=ctrl_file_d02)
 
 
 # In[ ]:
 
+
+## Debugging
 
 # import netCDF4 as nc
 # import numpy as np
