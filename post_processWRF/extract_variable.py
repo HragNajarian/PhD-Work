@@ -1014,20 +1014,21 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 ## Pick the main folder:
 	# i.e. parent_dir = '/where/your/wrfoutfiles/exist'
 parent_dir = sys.argv[1]
-# Control where icloud=1
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
-# NCRF where icloud=0
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+# Examples:
+	# Control where icloud=1
+	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
+	# NCRF where icloud=0
+	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
 
 ## Pick the raw folders:
 	# Control
 # raw_folder_d01 = '/raw/d01'
 # input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
-raw_folder_d02 = '/raw/d02'
-input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-# 	# CRF Off
-# raw_folder_d02 = '/raw/d02_sunrise'
+# raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+	# CRF Off
+raw_folder_d02 = '/raw/d02_sunrise'
+input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
@@ -1037,15 +1038,14 @@ output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
 # variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10', 'HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-# variable_name = ['Q2', 'U10']
+variable_name = ['LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
-# ctrl_file_d01 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-12-09-12--12-20-00/raw/d01'
-ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-12-09-12--12-20-00/raw/d02'
+# ctrl_file_d01 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d01'
+ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d02'
 
 ## Call on your function:
-# extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:])
+# extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:], ctrl_file=ctrl_file_d01)
 extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:], ctrl_file=ctrl_file_d02)
 
 
@@ -1060,7 +1060,7 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 # import wrf
 # import sys
 
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
 # raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 # input_file = input_file_d02
