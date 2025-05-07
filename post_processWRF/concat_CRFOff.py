@@ -52,7 +52,7 @@ if timeseries==True:
 	ds_sunrise_d02 = xr.open_mfdataset(sunrise_raw_d02, concat_dim='Time', combine='nested', data_vars='all', coords='all', preprocess=time_slice)
 	# ds_sunset_d02 = xr.open_mfdataset(sunset_raw_d02, concat_dim='Time', combine='nested', data_vars='all', coords='all', preprocess=time_slice)
 	# Save file
-	ds_sunrise_d02.to_netcdf(path=parent_dir+'/d02', mode='w', format='NETCDF4', unlimited_dims='Time')
+	ds_sunrise_d02.to_netcdf(path=parent_dir+'/d02_sunrise', mode='w', format='NETCDF4', unlimited_dims='Time')
 	# ds_sunset_d02.to_netcdf(path=parent_dir+'/d02_sunset', mode='w', format='NETCDF4', unlimited_dims='Time')
 else:
 	# Save the entire 36-hours and concat over 'Lead' dimension
