@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=mas_post
-#SBATCH --dependency=afterok:24670154
+##SBATCH --dependency=afterok:25060246
 #SBATCH -p radclouds
 #SBATCH -N 1
 #SBATCH -n 64
-#SBATCH --nodelist=c874
+#SBATCH --nodelist=c875
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
@@ -15,24 +15,24 @@
 
 # This is a master script that will concat all the wrfout files (raw), extract variables (L1), interpolate variables (L2), and do cross-sectional analysis (L3).
 
-# Concat
-export job_post_proc_id=$(sbatch "/home/hragnajarian/PhD/scripts/post_proc.job" $1|tr -d -c 0-9)
-echo "post_proc Job ID: ${job_post_proc_id}"
+# # Concat
+# export job_post_proc_id=$(sbatch "/home/hragnajarian/PhD/scripts/post_proc.job" $1|tr -d -c 0-9)
+# echo "post_proc Job ID: ${job_post_proc_id}"
 
-# Extract
-sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_post_proc_id}" "/home/hragnajarian/PhD/scripts/run_extract.job"
-export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" $1|tr -d -c 0-9)
-echo "extract Job ID: ${job_run_extract_id}"
+# # Extract
+# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_post_proc_id}" "/home/hragnajarian/PhD/scripts/run_extract.job"
+# export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" $1|tr -d -c 0-9)
+# echo "extract Job ID: ${job_run_extract_id}"
 
-# Interpolate
-sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_interp.job"
-export job_run_interp_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_interp.job" $1|tr -d -c 0-9)
-echo "interp Job ID: ${job_run_interp_id}"
+# # Interpolate
+# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_interp.job"
+# export job_run_interp_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_interp.job" $1|tr -d -c 0-9)
+# echo "interp Job ID: ${job_run_interp_id}"
 
-# Cross-section
-sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
-export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
-echo "cross Job ID: ${job_run_cross_section_id}"
+# # Cross-section
+# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
+# export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
+# echo "cross Job ID: ${job_run_cross_section_id}"
 
 
 ###################################################################################################################################
@@ -42,7 +42,7 @@ echo "cross Job ID: ${job_run_cross_section_id}"
 
 # # Declare the parent dir:
 # 	# This is where you would keep all the directories where the simulations directories are held.
-# parent_dir=("/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff")
+# parent_dir=("/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff_Ocean")
 
 # # List all the directories that have been made via mkdir_and_subdirectories.py. Name option acts as a pattern recognizer
 # directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -name "2015*" -type d | sort))
@@ -52,10 +52,14 @@ echo "cross Job ID: ${job_run_cross_section_id}"
 # 	echo "This is the counter: ${counter}"
 # 	echo "This is the current processing directory: ${dir}"
 
-# 	# Extract job -> Cross job
-# 		# Step 1, run run_extract.job and capture the JobID
-# 	export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
-# 	echo "extract Job ID: ${job_run_extract_id}"
+	# # Concat job -> Extract job
+	# export job_post_proc_id=$(sbatch "/home/hragnajarian/PhD/scripts/post_proc.job" "$dir"|tr -d -c 0-9)
+	# echo "post_proc Job ID: ${job_post_proc_id}"
+	
+	# # Extract job -> Cross job
+	# 	# Step 1, run run_extract.job and capture the JobID
+	# export job_run_extract_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_extract.job" "$dir"|tr -d -c 0-9)
+	# echo "extract Job ID: ${job_run_extract_id}"
 
 
 	# # Interp job -> Cross job
@@ -64,7 +68,7 @@ echo "cross Job ID: ${job_run_cross_section_id}"
 	# echo "interp Job ID: ${job_run_interp_id}"
 
 
-	# Step 2, set a dependency for run_cross_section.job where it only runs once run_interp.job OR run_extract.job is completed.
+	# # Step 2, set a dependency for run_cross_section.job where it only runs once run_interp.job OR run_extract.job is completed.
 	# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 	# sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 
@@ -72,18 +76,6 @@ echo "cross Job ID: ${job_run_cross_section_id}"
 	# export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" "$dir"|tr -d -c 0-9)
 	# echo "cross Job ID: ${job_run_cross_section_id}"
 
-	# Advance the counter so that the if else fi statement works
+# 	# Advance the counter so that the if else fi statement works
 # 	((counter++))
 # done
-
-
-
-# Old version (doesn't work because it doesn't set dependencies)
-# # Concat
-# sbatch /home/hragnajarian/experiment_files/post_proc.job $1
-# # Extract
-# sbatch /home/hragnajarian/experiment_files/run_extract.job $1
-# # Interpolate
-# sbatch /home/hragnajarian/experiment_files/run_interp.job $1
-# # Cross-section
-# sbatch /home/hragnajarian/experiment_files/run_cross_section.job $1

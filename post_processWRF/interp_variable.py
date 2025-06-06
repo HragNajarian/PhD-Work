@@ -74,6 +74,73 @@ import time
 
 ##############################################################################
 
+## Pick the main folder:
+	# parent_dir = '/where/your/wrfoutfiles/exist'
+parent_dir = sys.argv[1]
+# Examples:
+	# Control where icloud=1
+	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
+	# NCRF where icloud=0
+	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
+
+
+## Pick the raw folders:
+# raw_folder_d01 = '/raw/d01'  # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02'  # Path to the raw input netCDF file
+raw_folder_d02 = '/raw/d02_sunrise'		# Path to stitched raw CRFoff files
+input_file_d02 = parent_dir + raw_folder_d02
+
+
+## Where does your 3-D pressure file live
+# pressure_file_d01 = parent_dir + '/L1/d01_P'
+# pressure_file_d02 = parent_dir + '/L1/d02_P'
+pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
+
+
+## Output to level 2 directory:
+output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
+
+
+## Declare the vertial levels you want to interpolate:
+# vertical_levels = np.array(1000)
+# vertical_levels = np.arange(1000,0,-50)
+vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+
+
+var_info = {
+    'U':            {'wrf_name': 'U',          'wrfpy_name': 'ua',     'ref_dim': 'QVAPOR'},
+    'V':            {'wrf_name': 'V',          'wrfpy_name': 'va',     'ref_dim': 'QVAPOR'},
+    'W':            {'wrf_name': 'W',          'wrfpy_name': 'wa',     'ref_dim': 'QVAPOR'},
+    'QV':           {'wrf_name': 'QVAPOR',     'wrfpy_name': None,     'ref_dim': 'QVAPOR'},
+    'QC':           {'wrf_name': 'QCLOUD',     'wrfpy_name': None,     'ref_dim': 'QCLOUD'},
+    'QR':           {'wrf_name': 'QRAIN',      'wrfpy_name': None,     'ref_dim': 'QRAIN'},
+    'QI':           {'wrf_name': 'QICE',       'wrfpy_name': None,     'ref_dim': 'QICE'},
+    'QS':           {'wrf_name': 'QSNOW',      'wrfpy_name': None,     'ref_dim': 'QSNOW'},
+    'QG':           {'wrf_name': 'QGRAUP',     'wrfpy_name': None,     'ref_dim': 'QGRAUP'},
+    'CLDFRA':       {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'CLDFRA'},
+    'Theta':        {'wrf_name': 'T',          'wrfpy_name': None,     'ref_dim': 'T'},
+    'H_DIABATIC':   {'wrf_name': 'H_DIABATIC', 'wrfpy_name': None,     'ref_dim': 'H_DIABATIC'},
+    'SWClear':      {'wrf_name': 'RTHRATSWC',  'wrfpy_name': None,     'ref_dim': 'RTHRATSWC'},
+    'SWAll':        {'wrf_name': 'RTHRATSW',   'wrfpy_name': None,     'ref_dim': 'RTHRATSW'},
+    'LWClear':      {'wrf_name': 'RTHRATLWC',  'wrfpy_name': None,     'ref_dim': 'RTHRATLWC'},
+    'LWAll':        {'wrf_name': 'RTHRATLW',   'wrfpy_name': None,     'ref_dim': 'RTHRATLW'}
+}
+
+# Open the input netCDF file
+dataset = nc.Dataset(input_file_d02, 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
+# Load in the dataset with the pressure variable to interpolate from
+pressure_dataset = nc.Dataset(pressure_file_d02, 'r')
+P_var = pressure_dataset.variables['P']    # Pressure [hPa]
+
+# Declare variables to interpolate (they must exist in 'var_info')
+# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+variables_to_process = ['U', 'V', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+
+
+###############################################################################################################
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ USER INPUTS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
+###############################################################################################################
+
 
 def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, file_name, var_info):
 
@@ -133,78 +200,6 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
 
     return
 
-
-# In[30]:
-
-
-## Pick the main folder:
-	# parent_dir = '/where/your/wrfoutfiles/exist'
-parent_dir = sys.argv[1]
-# Examples:
-	# Control where icloud=1
-	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00'
-	# NCRF where icloud=0
-	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/new10day-2015-11-22-12--12-03-00/CRFoff'
-
-
-## Pick the raw folders:
-# raw_folder_d01 = '/raw/d01'  # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02'  # Path to the raw input netCDF file
-raw_folder_d02 = '/raw/d02_sunrise'		# Path to stitched raw CRFoff files
-input_file_d02 = parent_dir + raw_folder_d02
-
-
-## Where does your 3-D pressure file live
-# pressure_file_d01 = parent_dir + '/L1/d01_P'
-# pressure_file_d02 = parent_dir + '/L1/d02_P'
-pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
-
-
-## Output to level 2 directory:
-output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
-# Declare variables needed: 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll'
-# variable_name = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-
-
-## Declare the vertial levels you want to interpolate:
-# vertical_levels = np.array(1000)
-# vertical_levels = np.arange(1000,0,-50)
-vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
-
-###################################################################################################################
-###################################################################################################################
-###################################################################################################################
-
-var_info = {
-    'U':            {'wrf_name': 'U',          'wrfpy_name': 'ua',     'ref_dim': 'QVAPOR'},
-    'V':            {'wrf_name': 'V',          'wrfpy_name': 'va',     'ref_dim': 'QVAPOR'},
-    'W':            {'wrf_name': 'W',          'wrfpy_name': 'wa',     'ref_dim': 'QVAPOR'},
-    'QV':           {'wrf_name': 'QVAPOR',     'wrfpy_name': None,     'ref_dim': 'QVAPOR'},
-    'QC':           {'wrf_name': 'QCLOUD',     'wrfpy_name': None,     'ref_dim': 'QCLOUD'},
-    'QR':           {'wrf_name': 'QRAIN',      'wrfpy_name': None,     'ref_dim': 'QRAIN'},
-    'QI':           {'wrf_name': 'QICE',       'wrfpy_name': None,     'ref_dim': 'QICE'},
-    'QS':           {'wrf_name': 'QSNOW',      'wrfpy_name': None,     'ref_dim': 'QSNOW'},
-    'QG':           {'wrf_name': 'QGRAUP',     'wrfpy_name': None,     'ref_dim': 'QGRAUP'},
-    'CLDFRA':       {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'CLDFRA'},
-    'Theta':        {'wrf_name': 'T',          'wrfpy_name': None,     'ref_dim': 'T'},
-    'H_DIABATIC':   {'wrf_name': 'H_DIABATIC', 'wrfpy_name': None,     'ref_dim': 'H_DIABATIC'},
-    'SWClear':      {'wrf_name': 'RTHRATSWC',  'wrfpy_name': None,     'ref_dim': 'RTHRATSWC'},
-    'SWAll':        {'wrf_name': 'RTHRATSW',   'wrfpy_name': None,     'ref_dim': 'RTHRATSW'},
-    'LWClear':      {'wrf_name': 'RTHRATLWC',  'wrfpy_name': None,     'ref_dim': 'RTHRATLWC'},
-    'LWAll':        {'wrf_name': 'RTHRATLW',   'wrfpy_name': None,     'ref_dim': 'RTHRATLW'}
-}
-
-# Open the input netCDF file
-dataset = nc.Dataset(input_file_d02, 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
-# Load in the dataset with the pressure variable to interpolate from
-pressure_dataset = nc.Dataset(pressure_file_d02, 'r')
-P_var = pressure_dataset.variables['P']    # Pressure [hPa]
-
-# Declare variables to interpolate (they must exist in 'var_info')
-# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-# variables_to_process = ['U','Theta']
-variables_to_process = ['V', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-
 # Loop through variables
 for var in variables_to_process:
     interp_variable(
@@ -220,6 +215,12 @@ for var in variables_to_process:
 # Close dataset and pressure_dataset AFTER all variables are processed
 dataset.close()
 pressure_dataset.close()
+
+
+# In[30]:
+
+
+
 
 
 # In[ ]:

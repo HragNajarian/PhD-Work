@@ -7,7 +7,7 @@
 """ 
 Author: Hrag Najarian
 Date made: September 9, 2024
-Purpose: Stitch CRFoff wrfout files
+Purpose: Stitch CRFoff wrfout files as a time series or ensemble
 """
 
 
@@ -18,19 +18,20 @@ Purpose: Stitch CRFoff wrfout files
 	# jupyter nbconvert concat_CRFOff.ipynb --to python
 
 
-# In[19]:
+# In[ ]:
 
 
 import glob
 import xarray as xr
+import sys
 
 
-# In[22]:
+# In[ ]:
 
 
 # Declare parent_dir where all the directories are located 
-# parent_dir = sys.argv[1]
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
+parent_dir = sys.argv[1]
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff_Ocean'
 timeseries = True
 # List files
 if timeseries==True:
@@ -40,7 +41,7 @@ else:
 	NCRF_raw_d02 = sorted(glob.glob(parent_dir + '/2015*/raw/d02'))					# both Sunset and Sunrise 
 
 
-# In[5]:
+# In[ ]:
 
 
 def time_slice(ds):
@@ -52,11 +53,11 @@ if timeseries==True:
 	ds_sunrise_d02 = xr.open_mfdataset(sunrise_raw_d02, concat_dim='Time', combine='nested', data_vars='all', coords='all', preprocess=time_slice)
 	# ds_sunset_d02 = xr.open_mfdataset(sunset_raw_d02, concat_dim='Time', combine='nested', data_vars='all', coords='all', preprocess=time_slice)
 	# Save file
-	ds_sunrise_d02.to_netcdf(path=parent_dir+'/d02_sunrise', mode='w', format='NETCDF4', unlimited_dims='Time')
-	# ds_sunset_d02.to_netcdf(path=parent_dir+'/d02_sunset', mode='w', format='NETCDF4', unlimited_dims='Time')
+	ds_sunrise_d02.to_netcdf(path=parent_dir+'/raw/d02_sunrise', mode='w', format='NETCDF4', unlimited_dims='Time')
+	# ds_sunset_d02.to_netcdf(path=parent_dir+'/raw/d02_sunset', mode='w', format='NETCDF4', unlimited_dims='Time')
 else:
 	# Save the entire 36-hours and concat over 'Lead' dimension
 	ds_NCRF_d02 = xr.open_mfdataset(NCRF_raw_d02, concat_dim='Lead', combine='nested', data_vars='all', coords='all', parallel=True)
 	# Save file
-	ds_NCRF_d02.to_netcdf(path=parent_dir+'/d02_NCRF', mode='w', format='NETCDF4', unlimited_dims='Time')
+	ds_NCRF_d02.to_netcdf(path=parent_dir+'/raw_ens/d02_NCRF', mode='w', format='NETCDF4', unlimited_dims='Time')
 

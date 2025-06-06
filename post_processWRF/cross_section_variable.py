@@ -319,10 +319,10 @@ def without_keys(d, keys):
 
 
 ##cd into the appropriate directory (L3) and then assign a parent directory
-# parent_dir = sys.argv[1]
+parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00'
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
 
 times = [np.datetime64('2015-12-09T12'), np.datetime64('2015-12-20T12')]
 # times = [np.datetime64('2015-12-10T01'), np.datetime64('2015-12-10T03')]
@@ -352,10 +352,11 @@ region_settings = {
     }
 }
 
+#### NOT WORKING, KEEP '' OR '_sunrise' for now
 ## starter string to diseminate between experiments
     # icloud=0 at sunrise, starter_str='_sunrise'
     # icloud=1, starter_str=''
-    # icloud=depend, starter_str='_oceanoff'
+    # icloud=depends, starter_str='_oceanoff'
 starter_str = '_sunrise'
 
 # Declare variables to interpolate (they must exist in 'l1_files' or 'l2_files')
@@ -414,7 +415,7 @@ l1_files = {
     f'd02{starter_str}_SWDNTC':   ('W/m^2',   'SWDNTC',  'Clear-sky downward SW radiation at TOA'),
     f'd02{starter_str}_SWUPTC':   ('W/m^2',   'SWUPTC',  'Clear-sky upward SW radiation at TOA'),
 }
-    # Interpolated 3-D data 
+    # Interpolated 3-D data
 l2_files = {
     f'd02{starter_str}_interp_U':         ('m/s',     'U',         'Interpolated U-wind'),
     f'd02{starter_str}_interp_V':         ('m/s',     'V',         'Interpolated V-wind'),

@@ -435,22 +435,39 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 
 			# You are most likely looking at a concatenated ensemble of simulations from restart files
 			elif (input_file[-3:]=='ise' or input_file[-3:]=='set'):# d02_sunr(ise) or d02_sun(set)
+				# R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+				# ## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
+				# dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+				# R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+				# # Select datasets over the same times
+				# start_ind, end_ind = np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][0])[0][0], np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][-1])[0][0]
+				# R_accum_cntl = R_accum_cntl[start_ind:end_ind+1]
+				# # Take the differences
+				# RR = R_accum[1:] - R_accum[:-1]		     			# Take the difference to make it rain rate per timestep [mm/dt]	
+				# # Taking the difference between simulations at the 24 hr mark tends to create negative rain rates since the states of each simulation is different
+				# 	# To resolve this issue, we calculate the rain rate at the first time step of each simulation from the control since it initiates from the control.
+				# replacement_inds = np.argwhere(np.mean(RR,axis=(1,2))<0).squeeze()
+				# RR[replacement_inds,:,:] = R_accum[replacement_inds,:,:] - R_accum_cntl[replacement_inds-1,:,:]
+				# # Append zeros to the first timestep to rain rate to say the first timestep is zero
+				# variable = np.ma.append(np.zeros((1,RR[0].shape[0],RR[0].shape[1])), RR, axis=0)
+
 				R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
 				dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
 				R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
-				# Select datasets over the same times
+				## Select datasets over the same times
 				start_ind, end_ind = np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][0])[0][0], np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][-1])[0][0]
-				R_accum_cntl = R_accum_cntl[start_ind:end_ind+1]
-				# Take the differences
-				RR = R_accum[1:] - R_accum[:-1]		     			# Take the difference to make it rain rate per timestep [mm/dt]	
+				R_accum_cntl_sliced = R_accum_cntl[start_ind:end_ind+1]
+				## Take the differences
+				RR = R_accum[1:] - R_accum[:-1]		     			# Take the difference to make it rain rate per timestep [mm/dt]
 				# Taking the difference between simulations at the 24 hr mark tends to create negative rain rates since the states of each simulation is different
-					# To resolve this issue, we calculate the rain rate at the first time step of each simulation from the control since it initiates from the control.
+					# To resolve this issue, we calculate the rain rate at the first time step of each simulation using control values since it initiates from the control.
+					# This means we are subsituting the first time step of rain rates in experiments with control rain rates
 				replacement_inds = np.argwhere(np.mean(RR,axis=(1,2))<0).squeeze()
-				RR[replacement_inds,:,:] = R_accum[replacement_inds,:,:] - R_accum_cntl[replacement_inds-1,:,:]
-				# Append zeros to the first timestep to rain rate to say the first timestep is zero
-				variable = np.ma.append(np.zeros((1,RR[0].shape[0],RR[0].shape[1])), RR, axis=0)
-				
+				RR[replacement_inds,:,:] = R_accum_cntl_sliced[replacement_inds,:,:] - R_accum_cntl_sliced[replacement_inds-1,:,:]
+				# Append what rain rate was in CTRL to the first timestep to rain rate to say the first timestep is zero
+				variable = np.ma.append(np.expand_dims(R_accum_cntl[start_ind]-R_accum_cntl[start_ind-1], axis=0), RR, axis=0)
+								
 				# Create new .nc file
 				output_dataset = nc.Dataset(output_dir + file_name + '_RR', 'w', clobber=True)
 				output_dataset.setncatts(dataset.__dict__)
@@ -1008,7 +1025,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 	return
 
 
-# In[ ]:
+# In[7]:
 
 
 ## Pick the main folder:
@@ -1019,6 +1036,8 @@ parent_dir = sys.argv[1]
 	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
 	# NCRF where icloud=0
 	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
+
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
 
 ## Pick the raw folders:
 	# Control
@@ -1037,8 +1056,8 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+# variable_name = ['RR']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
 # ctrl_file_d01 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d01'
@@ -1047,6 +1066,34 @@ ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnaj
 ## Call on your function:
 # extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:], ctrl_file=ctrl_file_d01)
 extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:], ctrl_file=ctrl_file_d02)
+
+
+# In[52]:
+
+
+# import matplotlib.pyplot as plt
+# input_file = input_file_d02
+# file_name = raw_folder_d02[5:]
+# ctrl_file=ctrl_file_d02
+# # Open the input netCDF file
+# dataset = nc.Dataset(input_file, 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
+
+# R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+# ## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
+# dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
+# R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
+# ## Select datasets over the same times
+# start_ind, end_ind = np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][0])[0][0], np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][-1])[0][0]
+# R_accum_cntl_sliced = R_accum_cntl[start_ind:end_ind+1]
+# ## Take the differences
+# RR = R_accum[1:] - R_accum[:-1]		     			# Take the difference to make it rain rate per timestep [mm/dt]
+# # Taking the difference between simulations at the 24 hr mark tends to create negative rain rates since the states of each simulation is different
+# 	# To resolve this issue, we calculate the rain rate at the first time step of each simulation using control values since it initiates from the control.
+# 	# This means we are subsituting the first time step of rain rates in experiments with control rain rates
+# replacement_inds = np.argwhere(np.mean(RR,axis=(1,2))<0).squeeze()
+# RR[replacement_inds,:,:] = R_accum_cntl_sliced[replacement_inds,:,:] - R_accum_cntl_sliced[replacement_inds-1,:,:]
+# # Append what rain rate was in CTRL to the first timestep to rain rate to say the first timestep is zero
+# variable = np.ma.append(np.expand_dims(R_accum_cntl[start_ind]-R_accum_cntl[start_ind-1], axis=0), RR, axis=0)
 
 
 # In[ ]:

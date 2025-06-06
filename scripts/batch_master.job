@@ -21,10 +21,10 @@
 
 # Declare the parent dir:
 	# This is where you would keep all the directories where the simulations will be held.
-parent_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff"
+parent_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff_Ocean"
 
 # Declare the WRF/run dir:
-wrf_run_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfstuff/WRF/run"
+wrf_run_dir="/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfstuff/WRF_exp/run"
 
 # List all the directories that have been made via mkdir_and_subdirectories.py. Name option acts as a pattern recognizer
 directories=($(find "$parent_dir" -mindepth 1 -maxdepth 1 -name "2015*" -type d | sort))

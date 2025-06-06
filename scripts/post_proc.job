@@ -4,12 +4,14 @@
 ##SBATCH --dependency
 #SBATCH -N 1
 #SBATCH -n 64
-#SBATCH --nodelist=c874
+#SBATCH --nodelist=c875
 ## c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
 #SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+# $1 is the parent_dir where directories raw, L1, L2, and L3 are located
 
 ## There are three versions below that concatenate files:
 
@@ -24,13 +26,12 @@
 
 
 
-# # 1. Concat through ncrcat (concat over 'Time' dimension)
-# 	# When you run this slurm job, submit the job with an arguement that is equal to
-# 	# the parent dir that you want to run ncrcat (folder that has sub_dirs of raw, L1, L2, and L3)
+# 1. Concat through ncrcat (concat over 'Time' dimension)
+	# When you run this slurm job, submit the job with an arguement that is equal to
+	# the parent dir that you want to run ncrcat (folder that has sub_dirs of raw, L1, L2, and L3)
 
-# # If there exists a concat version of d02, that means you can skip this post-processing step!
-
-# if [ -e "$1/raw/d02" ]; then
+# # If there exists a concat version of d01/d02, that means you can skip this post-processing step!
+# if [ -e "$1/raw/d01" ]; then
 # 	echo "Concat files already exist, moving on."
 # else
 # 	ncrcat $1/raw/wrfout_d01* $1/raw/d01
@@ -38,11 +39,10 @@
 # fi
 
 
-# # 2. Concat through ncecat (add 'record' dimension)
-
-# 	# This block concats an ensemble of simulations across a 'record' dimension
-# 		# https://linux.die.net/man/1/ncecat
-# 	# Creates a 'record' dimension that combines the simulations
+# 2. Concat through ncecat (add 'record' dimension)
+	# This block concats an ensemble of simulations across a 'record' dimension
+		# https://linux.die.net/man/1/ncecat
+	# Creates a 'record' dimension that combines the simulations
 
 # module load nco
 # # CRF off at Sunrise simulation
@@ -61,6 +61,7 @@
 
 # 3. Concat through xarray (concat over 'Time' dimension every 24-hrs)
 	# This is only for running concat_CRFOff.py
+
 mamba init
 mamba activate WRF_Xarray
-python -u /home/hragnajarian/PhD/post_processWRF/concat_CRFOff.py $1		# $1 is the parent_dir where directories raw, L1, L2, and L3 are located
+python -u /home/hragnajarian/PhD/post_processWRF/concat_CRFOff.py $1
