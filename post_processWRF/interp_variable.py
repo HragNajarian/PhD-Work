@@ -134,7 +134,7 @@ P_var = pressure_dataset.variables['P']    # Pressure [hPa]
 
 # Declare variables to interpolate (they must exist in 'var_info')
 # variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-variables_to_process = ['U', 'V', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+variables_to_process = ['W']
 
 
 ###############################################################################################################
@@ -215,12 +215,6 @@ for var in variables_to_process:
 # Close dataset and pressure_dataset AFTER all variables are processed
 dataset.close()
 pressure_dataset.close()
-
-
-# In[30]:
-
-
-
 
 
 # In[ ]:
