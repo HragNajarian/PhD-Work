@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 '''
@@ -10,14 +10,14 @@ Date: June 2023
 '''
 
 
-# In[ ]:
+# In[2]:
 
 
 # Run this command on the command line to create a .py script instead of .ipynb
 	# jupyter nbconvert extract_variable.ipynb --to python
 
 
-# In[1]:
+# In[3]:
 
 
 # Purpose: Extract important variables from a stitched WRFout file and 
@@ -60,6 +60,7 @@ Date: June 2023
 		# HGT == Terrain Height							[m]
 		# VEGFRA == Vegetation Fraction
 		# CAPE_CIN_2D == CAPE and CIN calculation		[J/kg]
+		# SST == Sea Surface Temperature				[K]
 			# All sky
 		# LWUPT == INSTANTANEOUS UPWELLING LONGWAVE FLUX AT TOP ,		[W/m^2]
 		# LWDNT == INSTANTANEOUS DOWNWELLING LONGWAVE FLUX AT TOP ,		[W/m^2]
@@ -435,22 +436,6 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 
 			# You are most likely looking at a concatenated ensemble of simulations from restart files
 			elif (input_file[-3:]=='ise' or input_file[-3:]=='set'):# d02_sunr(ise) or d02_sun(set)
-				# R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
-				# ## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
-				# dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
-				# R_accum_cntl = dataset_cntl.variables['RAINNC']		# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
-				# # Select datasets over the same times
-				# start_ind, end_ind = np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][0])[0][0], np.where(dataset_cntl.variables['XTIME'] == dataset.variables['XTIME'][-1])[0][0]
-				# R_accum_cntl = R_accum_cntl[start_ind:end_ind+1]
-				# # Take the differences
-				# RR = R_accum[1:] - R_accum[:-1]		     			# Take the difference to make it rain rate per timestep [mm/dt]	
-				# # Taking the difference between simulations at the 24 hr mark tends to create negative rain rates since the states of each simulation is different
-				# 	# To resolve this issue, we calculate the rain rate at the first time step of each simulation from the control since it initiates from the control.
-				# replacement_inds = np.argwhere(np.mean(RR,axis=(1,2))<0).squeeze()
-				# RR[replacement_inds,:,:] = R_accum[replacement_inds,:,:] - R_accum_cntl[replacement_inds-1,:,:]
-				# # Append zeros to the first timestep to rain rate to say the first timestep is zero
-				# variable = np.ma.append(np.zeros((1,RR[0].shape[0],RR[0].shape[1])), RR, axis=0)
-
 				R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
 				dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
@@ -463,11 +448,14 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				# Taking the difference between simulations at the 24 hr mark tends to create negative rain rates since the states of each simulation is different
 					# To resolve this issue, we calculate the rain rate at the first time step of each simulation using control values since it initiates from the control.
 					# This means we are subsituting the first time step of rain rates in experiments with control rain rates
-				replacement_inds = np.argwhere(np.mean(RR,axis=(1,2))<0).squeeze()
+				valid_negatives = (RR < 0) & ~np.isnan(RR)			# Mask out NaNs and check for negative values only in valid (non-NaN) entries
+				has_negative = np.any(valid_negatives, axis=(1, 2))	# Reduce across lat and lon to find if any valid negative exists at each time index
+				replacement_inds = np.where(has_negative)[0]		# Get the time indices where valid negatives occur
 				RR[replacement_inds,:,:] = R_accum_cntl_sliced[replacement_inds,:,:] - R_accum_cntl_sliced[replacement_inds-1,:,:]
 				# Append what rain rate was in CTRL to the first timestep to rain rate to say the first timestep is zero
 				variable = np.ma.append(np.expand_dims(R_accum_cntl[start_ind]-R_accum_cntl[start_ind-1], axis=0), RR, axis=0)
-								
+
+
 				# Create new .nc file
 				output_dataset = nc.Dataset(output_dir + file_name + '_RR', 'w', clobber=True)
 				output_dataset.setncatts(dataset.__dict__)
@@ -600,6 +588,22 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			variable = dataset.variables['TSK']	# [K]
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + file_name + '_TSK', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create dimensions in the output file
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into new file
+			output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
+			temp_atts = variable.__dict__
+			output_variable.setncatts(temp_atts)
+			output_variable[:] = variable[:]	# not a large variable so no need to loop
+			output_dataset.close()
+
+		# Sea Surface Temperature		[K]
+		elif i == 'SSTSK':
+			variable = dataset.variables['SSTSK']	# [K]
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_SSTSK', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create dimensions in the output file
 			for dim_name, dim in dataset.dimensions.items():
@@ -756,7 +760,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			temp_atts.update({'description':'CIN', 'units':'J/kg'})
 			output_variable.setncatts(temp_atts)
 			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
-				variable = wrf.getvar(dataset, 'cape_2d', timeidx=t, meta=False)[1,...]	# Only include CIN with the [0,...]
+				variable = wrf.getvar(dataset, 'cape_2d', timeidx=t, meta=False)[1,...]	# Only include CIN with the [1,...]
 				output_variable[t,...] = variable[:]								
 			output_dataset.close()	# Make sure you close the .nc file
 
@@ -1025,24 +1029,25 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 	return
 
 
-# In[7]:
+# In[4]:
 
 
 ## Pick the main folder:
 	# i.e. parent_dir = '/where/your/wrfoutfiles/exist'
-parent_dir = sys.argv[1]
+# parent_dir = sys.argv[1]
 # Examples:
 	# Control where icloud=1
 	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
 	# NCRF where icloud=0
 	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
+	# NCRF where icloud=0 over ocean only
+	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff_Ocean'
 
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
+parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
 
 ## Pick the raw folders:
 	# Control
-# raw_folder_d01 = '/raw/d01'
-# input_file_d01 = parent_dir + raw_folder_d01  # Path to the raw input netCDF file
 # raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off
@@ -1056,19 +1061,19 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-# variable_name = ['RR']
+# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['CIN']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
-# ctrl_file_d01 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d01'
+# ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
 ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d02'
 
+
 ## Call on your function:
-# extract_variable(input_file_d01, variable_name, output_dir, file_name=raw_folder_d01[5:], ctrl_file=ctrl_file_d01)
 extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder_d02[5:], ctrl_file=ctrl_file_d02)
 
 
-# In[52]:
+# In[42]:
 
 
 # import matplotlib.pyplot as plt
@@ -1090,16 +1095,18 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 # # Taking the difference between simulations at the 24 hr mark tends to create negative rain rates since the states of each simulation is different
 # 	# To resolve this issue, we calculate the rain rate at the first time step of each simulation using control values since it initiates from the control.
 # 	# This means we are subsituting the first time step of rain rates in experiments with control rain rates
-# replacement_inds = np.argwhere(np.mean(RR,axis=(1,2))<0).squeeze()
+# valid_negatives = (RR < 0) & ~np.isnan(RR)			# Mask out NaNs and check for negative values only in valid (non-NaN) entries
+# has_negative = np.any(valid_negatives, axis=(1, 2))	# Reduce across lat and lon to find if any valid negative exists at each time index
+# replacement_inds = np.where(has_negative)[0]		# Get the time indices where valid negatives occur
 # RR[replacement_inds,:,:] = R_accum_cntl_sliced[replacement_inds,:,:] - R_accum_cntl_sliced[replacement_inds-1,:,:]
 # # Append what rain rate was in CTRL to the first timestep to rain rate to say the first timestep is zero
 # variable = np.ma.append(np.expand_dims(R_accum_cntl[start_ind]-R_accum_cntl[start_ind-1], axis=0), RR, axis=0)
 
 
-# In[ ]:
+# In[35]:
 
 
-## Debugging
+# ## Debugging
 
 # import netCDF4 as nc
 # import numpy as np
@@ -1107,30 +1114,34 @@ extract_variable(input_file_d02, variable_name, output_dir, file_name=raw_folder
 # import wrf
 # import sys
 
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
-# raw_folder_d02 = '/raw/d02'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
+# # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
+# raw_folder_d02 = '/raw/d02_sunrise'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 # input_file = input_file_d02
 # output_dir = parent_dir + '/L1/'
-# variable_name = ['SMOIS']
+# variable_name = ['CAPE']
 # i=variable_name[0]
 # file_name=raw_folder_d02[5:]
 
 # # Open the input netCDF file
 # dataset = nc.Dataset(input_file, 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
 
-# variable = dataset.variables['SMOIS'][:,0,:,:]	# [m^3/m^3]	# Pick the first layer, hence the [:,0,:,:]	== [Time, soil_layers_stag, south_north, west east]
-# # Create new .nc file
-# output_dataset = nc.Dataset(output_dir + file_name + '_SMOIS', 'w', clobber=True)
-# output_dataset.setncatts(dataset.__dict__)
-# # Create dimensions in the output file
-# for dim_name, dim in dataset.dimensions.items():
-# 	output_dataset.createDimension(dim_name, len(dim))
-# # Create the variable, set attributes, and copy the variable into new file
-# output_variable = output_dataset.createVariable(i, variable.dtype, variable.dimensions)
-# temp_atts = variable.__dict__
-# output_variable.setncatts(temp_atts)
-# output_variable[:] = variable[:]	# not a large variable so no need to loop
-# output_dataset.close()
+# # # Create new .nc file
+# # output_dataset = nc.Dataset(output_dir + file_name + '_CAPE', 'w', clobber=True)
+# # output_dataset.setncatts(dataset.__dict__)
+# # # Create dimensions in the output file
+# # for dim_name, dim in dataset.dimensions.items():
+# # 	output_dataset.createDimension(dim_name, len(dim))
+# # # Create the variable, set attributes, and copy the variable into new file
+# # output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['XLAT'].dimensions)	# 'f4' == float32
+# # temp_atts = dataset.variables['XLAT'].__dict__
+# # temp_atts.update({'description':'CAPE', 'units':'J/kg'})
+# # output_variable.setncatts(temp_atts)
+# # for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+# # 	variable = wrf.getvar(dataset, 'cape_2d', timeidx=t, meta=False)[0,...]	# Only include CAPE with the [0,...]
+# # 	output_variable[t,...] = variable[:]								
+# # output_dataset.close()	# Make sure you close the .nc file
 
+# da_cape_2d = wrf.getvar(dataset, 'cape_2d', timeidx=0, meta=False)
 
