@@ -56,10 +56,10 @@ from wrf import default_fill
 #######################################################################################
 
 ## What variables would you like to integrate?
-L2_vars = ['W']
+L2_vars = ['QV']
 ## What pressure levels are you integrating between?
 p_bot=1000
-p_top=500
+p_top=800
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
@@ -89,7 +89,7 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
     # Calculate mean value between levels
     da_roll = da.rolling(bottom_top=2).mean().sel(bottom_top=dp.bottom_top.values)
 
-    # Broadcast dp to match da_mid
+    # Broadcast dp to match da_roll
     dp_broadcasted = dp.broadcast_like(da_roll)
 
     # Perform integration (sum over vertical)
@@ -162,15 +162,15 @@ for i, path in enumerate(L2_var_paths):
 
     ## Assign attributes
     da_VI = da_VI.assign_attrs(
-    Pressure_bounds=f'{p_bot} to {p_top}',
+    Pressure_bounds=f'{p_bot} to {p_top}hPa',
     Units=da.attrs['units']
     )
 
     ## Save File
     if 'CRFoff' in parent_dir:
-        file_name = parent_dir + '/L4/d02_sunrise_VI_' + str(L2_vars[i])
+        file_name = f"{parent_dir}/L4/d02_sunrise_VI_{L2_vars[i]}_{p_bot}-{p_top}"
     else:
-        file_name = parent_dir + '/L4/d02_VI_' + str(L2_vars[i])
+        file_name = f"{parent_dir}/L4/d02_VI_{L2_vars[i]}_{p_bot}-{p_top}"
     da_VI.to_netcdf(path=file_name, mode='w', format='NETCDF4', compute=True)
     step2_time = time.perf_counter()
     print(f'{L2_vars[i]} saved \N{check mark}', step2_time-step1_time, 'seconds')
