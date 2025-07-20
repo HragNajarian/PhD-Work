@@ -56,10 +56,11 @@ from wrf import default_fill
 #######################################################################################
 
 ## What variables would you like to integrate?
-L2_vars = ['QV']
+L2_vars = ['QV', 'W']
 ## What pressure levels are you integrating between?
-p_bot=1000
-p_top=800
+    # p_bot must be greater than p_top
+p_bot=[[1000,1000,1000], [1000,1000,500]]
+p_top=[[700,500,100], [700,100,200]]
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
@@ -104,11 +105,8 @@ start1_time = time.perf_counter()
 
 
 ## First open the raw dataset in order to create the coordinates
-if 'CRFoff' in parent_dir:
-    raw_dir = parent_dir + '/raw/d02_sunrise'
-else:
-    raw_dir = parent_dir + '/raw/d02'
-ds_raw = xr.open_dataset(raw_dir, chunks='auto')#.isel(Time=[0])
+raw_subdir = 'd02_sunrise' if 'CRFoff' in parent_dir else 'd02'
+ds_raw = xr.open_dataset(os.path.join(parent_dir, 'raw', raw_subdir), chunks='auto')#.isel(Time=[0])
 step1_time = time.perf_counter()
 print('Dataset loaded \N{check mark}', step1_time-start1_time, 'seconds')
 
@@ -122,57 +120,46 @@ print('Created coordinate dictionaries \N{check mark}', step2_time-step1_time, '
 
 ## Create full paths of the variables to vertically integrate
 L2_dir = parent_dir + '/L2'
-if 'CRFoff' in parent_dir:
-    L2_var_files = {f'd02_sunrise_interp_{var}' for var in L2_vars}
-else:
-    L2_var_files = {f'd02_interp_{var}' for var in L2_vars}
-L2_var_paths = [
-    os.path.join(L2_dir, f) for f in os.listdir(L2_dir)
-    if f in L2_var_files]
+prefix = 'd02_sunrise_interp_' if 'CRFoff' in parent_dir else 'd02_interp_'
+L2_var_files = {f"{prefix}{var}" for var in L2_vars}
+L2_paths = [os.path.join(L2_dir, f) for f in os.listdir(L2_dir) if f in L2_var_files]
 
 
 ## Loop through the variable paths
-for i, path in enumerate(L2_var_paths):
+for i, path in enumerate(L2_paths):
     start2_time = time.perf_counter()
 
-    ## Open data set
+    ## Open data set, index appropriate variable, assign coords, and replace fill values with nans
     ds = xr.open_dataset(path, chunks='auto')#.isel(Time=[0])
-    step2_time = time.perf_counter()
-    print('Open Data Set \N{check mark}', step2_time-step1_time, 'seconds')
-
-    ## Open it into an data array and assign coords
-    da = ds[L2_vars[i]]
-    da = da.assign_coords(coords)
-    step1_time = time.perf_counter()
-    print('Compute Data Set \N{check mark}', step1_time-step2_time, 'seconds')
-
-    ## Replace any fill values with nans 
+    da = ds[L2_vars[i]].assign_coords(coords)
         # Important step over regions of terrain
     da = da.where(da != default_fill(np.float32))
     step2_time = time.perf_counter()
-    print('Replace fill values with nans \N{check mark}', step2_time-step1_time, 'seconds')
+    print('Open Data Set \N{check mark}', step2_time-step1_time, 'seconds')
 
-    ## Vertically Integrate
-    da_VI = vertical_integration(da, p_bot, p_top, g=9.81)
-    step1_time = time.perf_counter()
-    print('Vertically Integrated \N{check mark}', step1_time-step2_time, 'seconds')
 
-    ## Change Variable Name
-    da_VI.name = L2_vars[i]
+    ## Loop over the number of pressure layers you want to vertically integrate
+    for j in range(len(p_bot[i])):
+        p1 = p_bot[i][j]
+        p2 = p_top[i][j]
 
-    ## Assign attributes
-    da_VI = da_VI.assign_attrs(
-    Pressure_bounds=f'{p_bot} to {p_top}hPa',
-    Units=da.attrs['units']
-    )
+        ## Vertically Integrate
+        da_VI = vertical_integration(da, p1, p2, g=9.81)
+        step1_time = time.perf_counter()
+        print('Vertically Integrated \N{check mark}', step1_time-step2_time, 'seconds')
 
-    ## Save File
-    if 'CRFoff' in parent_dir:
-        file_name = f"{parent_dir}/L4/d02_sunrise_VI_{L2_vars[i]}_{p_bot}-{p_top}"
-    else:
-        file_name = f"{parent_dir}/L4/d02_VI_{L2_vars[i]}_{p_bot}-{p_top}"
-    da_VI.to_netcdf(path=file_name, mode='w', format='NETCDF4', compute=True)
-    step2_time = time.perf_counter()
-    print(f'{L2_vars[i]} saved \N{check mark}', step2_time-step1_time, 'seconds')
+        ## Change Variable Name and assign attributes
+        da_VI.name = L2_vars[i]
+        da_VI = da_VI.assign_attrs(
+        Pressure_bounds=f'{p1}-{p2} hPa',
+        Units=da.attrs['units']
+        )
+
+        ## Save File
+        filename_prefix = 'd02_sunrise' if 'CRFoff' in parent_dir else 'd02'
+        out_path = f"{parent_dir}/L4/{filename_prefix}_VI_{L2_vars[i]}_{p1}-{p2}"
+        da_VI.to_netcdf(out_path, mode='w', format='NETCDF4')
+        step2_time = time.perf_counter()
+        print(f'{L2_vars[i]} integrated over {p1}-{p2} hPa saved \N{check mark}', step2_time-step1_time, 'seconds')
 
     print(f'Total time for {L2_vars[i]} \N{check mark}', step2_time-start2_time, 'seconds')
