@@ -94,7 +94,7 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
     dp_broadcasted = dp.broadcast_like(da_roll)
 
     # Perform integration (sum over vertical)
-    da_integrated = (da_roll * dp_broadcasted).sum(dim='bottom_top') / g
+    da_integrated = -(da_roll * dp_broadcasted).sum(dim='bottom_top') / g
 
     # Convert to float32
     da_integrated = da_integrated.astype(np.float32)
