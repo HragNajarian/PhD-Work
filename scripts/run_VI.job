@@ -3,8 +3,8 @@
 #SBATCH -p radclouds
 ##SBATCH --dependency
 #SBATCH -N 1
-#SBATCH -n 56
-#SBATCH --nodelist=c797
+#SBATCH -n 3
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c874,c875,c969
 ## c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
