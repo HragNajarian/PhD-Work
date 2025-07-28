@@ -104,18 +104,11 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
 start1_time = time.perf_counter()
 
 
-## First open the raw dataset in order to create the coordinates
-raw_subdir = 'd02_sunrise' if 'CRFoff' in parent_dir else 'd02'
-ds_raw = xr.open_dataset(os.path.join(parent_dir, 'raw', raw_subdir), chunks='auto')#.isel(Time=[0])
-step1_time = time.perf_counter()
-print('Dataset loaded \N{check mark}', step1_time-start1_time, 'seconds')
-
-
 ## Assign bottom_top coordinates to make computations simpler using xarray
 interp_P_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))  # Should be in hPa
 coords = dict(bottom_top=(('bottom_top'),interp_P_levels))
 step2_time = time.perf_counter()
-print('Created coordinate dictionaries \N{check mark}', step2_time-step1_time, 'seconds')
+print('Created coordinate dictionaries \N{check mark}', step2_time-start1_time, 'seconds')
 
 
 ## Create full paths of the variables to vertically integrate
