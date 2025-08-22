@@ -435,7 +435,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				output_dataset.close()
 
 			# You are most likely looking at a concatenated ensemble of simulations from restart files
-			elif (input_file[-3:]=='ise' or input_file[-3:]=='set'):# d02_sunr(ise) or d02_sun(set)
+			elif (input_file[-3:]=='ise' or input_file[-3:]=='set' or input_file[-5:]=='adjLH'):# d02_sunr(ise) or d02_sun(set)
 				R_accum = dataset.variables['RAINNC']    			# ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				## In order to account for the difference in rain rates between NCRF simulations, control data needs to be subsituted in for the first time steps
 				dataset_cntl = nc.Dataset(ctrl_file, 'r')			# 'r' is just to read the dataset, we do NOT want write privledges
@@ -1034,7 +1034,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 
 ## Pick the main folder:
 	# i.e. parent_dir = '/where/your/wrfoutfiles/exist'
-# parent_dir = sys.argv[1]
+parent_dir = sys.argv[1]
 # Examples:
 	# Control where icloud=1
 	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
@@ -1044,25 +1044,28 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff_Ocean'
 
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
-parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
 
 ## Pick the raw folders:
 	# Control
 # raw_folder_d02 = '/raw/d02'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off
-raw_folder_d02 = '/raw/d02_sunrise'
-input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02_sunrise'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off Ensemble
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+	# Adjusted LH
+raw_folder_d02 = '/raw/d02_adjLH'
+input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 ## Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['CIN']
+variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+# variable_name = ['CAPE']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
 # ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'

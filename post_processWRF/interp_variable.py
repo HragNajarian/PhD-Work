@@ -85,16 +85,18 @@ parent_dir = sys.argv[1]
 
 
 ## Pick the raw folders:
-# raw_folder_d01 = '/raw/d01'  # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02'  # Path to the raw input netCDF file
-raw_folder_d02 = '/raw/d02_sunrise'		# Path to stitched raw CRFoff files
+# raw_folder_d01 = '/raw/d01'               # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02'               # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02_sunrise'       # Path to stitched raw CRFoff files
+raw_folder_d02 = '/raw/d02_adjLH'         # Path to the raw input netCDF file
 input_file_d02 = parent_dir + raw_folder_d02
 
 
 ## Where does your 3-D pressure file live
 # pressure_file_d01 = parent_dir + '/L1/d01_P'
 # pressure_file_d02 = parent_dir + '/L1/d02_P'
-pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
+# pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
+pressure_file_d02 = parent_dir + '/L1/d02_adjLH_P'
 
 
 ## Output to level 2 directory:
@@ -133,8 +135,8 @@ pressure_dataset = nc.Dataset(pressure_file_d02, 'r')
 P_var = pressure_dataset.variables['P']    # Pressure [hPa]
 
 # Declare variables to interpolate (they must exist in 'var_info')
-# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-variables_to_process = ['QV']
+variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
+# variables_to_process = ['W']
 
 
 ###############################################################################################################
