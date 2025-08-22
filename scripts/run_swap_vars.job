@@ -1,0 +1,92 @@
+#!/bin/bash
+#SBATCH --job-name=swap_vars
+#SBATCH -p radclouds
+##SBATCH --dependency
+#SBATCH -N 1
+#SBATCH -n 56
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+## c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+# Purpose:
+# Swap variables between two ranges of hourly NetCDF files for multiple domains.
+# Specifically made to use on met_em files
+# Swaps specific conditions (i.e., wind, moisture) to test for their impact on WRF
+
+
+# Directory where met_files are located
+NC_DIR=""
+SWAP_DIR=""
+
+# Variables to swap
+VARS="UU,VV"
+
+# Date ranges (inclusive, assumes hourly timesteps)
+START1="2015-12-10_00:00:00"
+END1="2015-12-11_00:00:00"
+
+START2="2015-12-19_00:00:00"
+END2="2015-12-20_00:00:00"
+
+# Domains to process
+DOMAINS=("d01" "d02")   # List of domains to process
+
+# Function to generate list of hourly timestamps
+generate_hours() {
+  local start=$1
+  local end=$2
+  local list=()
+
+  # Replace underscore with space for date parsing
+  t=$(date -u -d "${start/_/ }" +%s)
+  end_t=$(date -u -d "${end/_/ }" +%s)
+
+  while [ $t -le $end_t ]; do
+    list+=($(date -u -d @$t +%Y-%m-%d_%H:%M:%S))
+    t=$((t+3600))			# Hourly output
+  done
+  echo "${list[@]}"
+}
+
+# Generate file lists
+DATES1=($(generate_hours $START1 $END1))
+DATES2=($(generate_hours $START2 $END2))
+
+if [ ${#DATES1[@]} -ne ${#DATES2[@]} ]; then
+  echo "Error: number of timesteps differ (${#DATES1[@]} vs ${#DATES2[@]})"
+  exit 1
+fi
+
+echo "Swapping variables [$VARS]"
+echo "Range 1: $START1 → $END1 (${#DATES1[@]} files)"
+echo "Range 2: $START2 → $END2 (${#DATES2[@]} files)"
+echo "Domains: ${DOMAINS[@]}"
+
+# Loop through paired times and domains
+for i in "${!DATES1[@]}"; do
+  ts1=${DATES1[$i]}
+  ts2=${DATES2[$i]}
+
+  for dom in "${DOMAINS[@]}"; do
+    f1="met_em.${dom}.${ts1}.nc"
+    f2="met_em.${dom}.${ts2}.nc"
+
+    echo " -> Swapping between $f1 and $f2"
+
+    if [[ ! -f $f1 || ! -f $f2 ]]; then
+      echo "    Warning: missing $f1 or $f2, skipping..."
+      continue
+    fi
+
+    ncks -v $VARS "$f1" tmp1.nc
+    ncks -v $VARS "$f2" tmp2.nc
+    ncks -A -v $VARS tmp1.nc "$f2"
+    ncks -A -v $VARS tmp2.nc "$f1"
+    rm tmp1.nc tmp2.nc
+  done
+done
+
+echo "Done!"
