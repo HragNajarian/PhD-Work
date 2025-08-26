@@ -1,0 +1,84 @@
+#!/bin/bash
+#SBATCH --job-name=swap_vars
+#SBATCH -p radclouds
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+## c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+#SBATCH --exclusive
+#SBATCH --output=array_%A_%a.stdout.txt
+#SBATCH --error=array_%A_%a.stderr.txt
+##SBATCH --array=1-$N
+#SBATCH -t 6:00:00 # max job run time HH:MM:SS
+
+# Purpose:
+  # Swap variables between two ranges of hourly NetCDF files for multiple domains.
+  # Specifically made to use on met_em files
+  # Swaps specific conditions (i.e., wind, moisture) to test for their impact on WRF
+
+source config.sh
+source utils.sh
+
+# Generate file lists
+DATES1=($(generate_hours $START1 $END1))
+DATES2=($(generate_hours $START2 $END2))
+
+if [ ${#DATES1[@]} -ne ${#DATES2[@]} ]; then
+  echo "Error: number of timesteps differ (${#DATES1[@]} vs ${#DATES2[@]})"
+  exit 1
+fi
+
+echo "Swapping variables [$VARS]"
+echo "Range 1:           $START1 → $END1 (${#DATES1[@]} files)"
+echo "Range 2:           $START2 → $END2 (${#DATES2[@]} files)"
+echo "Domains:           ${DOMAINS[@]}"
+
+
+# Convert SLURM_ARRAY_TASK_ID (1-based) to bash index (0-based)
+idx=$((SLURM_ARRAY_TASK_ID-1))
+
+# Skip if this task index exceeds available pairs
+if [ $idx -ge ${#DATES1[@]} ]; then
+  echo "Task $SLURM_ARRAY_TASK_ID has no work (idx=$idx). Exiting."
+  exit 0
+fi
+
+ts1=${DATES1[$idx]}
+ts2=${DATES2[$idx]}
+
+echo "Array task $SLURM_ARRAY_TASK_ID processing:"
+echo " -> Swapping $VARS between $ts1 and $ts2 for domains ${DOMAINS[@]}"
+
+
+for dom in "${DOMAINS[@]}"; do
+  # Declare the og files
+  f1="$NC_DIR/met_em.${dom}.${ts1}.nc"
+  f2="$NC_DIR/met_em.${dom}.${ts2}.nc"
+
+  echo "$f1 <-> $f2"
+
+  if [[ ! -f $f1 || ! -f $f2 ]]; then
+    echo "    Missing file(s), skipping..."
+    continue
+  fi
+
+  cp "$f1" "$SWAP_DIR/"
+  cp "$f2" "$SWAP_DIR/"
+
+  f1_swap="$SWAP_DIR/met_em.${dom}.${ts1}.nc"
+  f2_swap="$SWAP_DIR/met_em.${dom}.${ts2}.nc"
+
+  tmp1=$(mktemp $SWAP_DIR/tmp1.XXXXXX.nc)
+  tmp2=$(mktemp $SWAP_DIR/tmp2.XXXXXX.nc)
+
+  ncks -O -v $VARS "$f1_swap" "$tmp1"
+  ncks -O -v $VARS "$f2_swap" "$tmp2"
+  ncks -A -v $VARS "$tmp1" "$f2_swap"
+  ncks -A -v $VARS "$tmp2" "$f1_swap"
+  rm "$tmp1" "$tmp2"
+
+  ncatted -a Swapped_Variables,global,o,c,"$VARS swapped on $(date -u)" "$f1_swap"
+  ncatted -a Swapped_Variables,global,o,c,"$VARS swapped on $(date -u)" "$f2_swap"
+done
+
+echo "Task $SLURM_ARRAY_TASK_ID done."
