@@ -88,7 +88,7 @@ parent_dir = sys.argv[1]
 # raw_folder_d01 = '/raw/d01'               # Path to the raw input netCDF file
 # raw_folder_d02 = '/raw/d02'               # Path to the raw input netCDF file
 # raw_folder_d02 = '/raw/d02_sunrise'       # Path to stitched raw CRFoff files
-raw_folder_d02 = '/raw/d02_adjLH'         # Path to the raw input netCDF file
+raw_folder_d02 = '/raw/d02_swap'         # Path to the raw input netCDF file
 input_file_d02 = parent_dir + raw_folder_d02
 
 
@@ -96,7 +96,7 @@ input_file_d02 = parent_dir + raw_folder_d02
 # pressure_file_d01 = parent_dir + '/L1/d01_P'
 # pressure_file_d02 = parent_dir + '/L1/d02_P'
 # pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
-pressure_file_d02 = parent_dir + '/L1/d02_adjLH_P'
+pressure_file_d02 = parent_dir + '/L1/d02_swap_P'
 
 
 ## Output to level 2 directory:

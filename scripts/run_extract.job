@@ -3,7 +3,7 @@
 #SBATCH -p radclouds
 ##SBATCH --dependency=afterok:26106051
 #SBATCH -N 1
-#SBATCH -n 56
+#SBATCH -n 1
 #SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
 ## c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
 #SBATCH --exclusive

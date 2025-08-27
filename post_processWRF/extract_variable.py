@@ -415,7 +415,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 		
 		# Rain Rate
 		elif (i == 'RR'):
-			if (input_file[-3:]=='d02' or input_file[-3:]=='d01'):
+			if (input_file[-3:]=='d02' or input_file[-3:]=='d01' or input_file[-4:]=='swap'):
 				R_accum = dataset.variables['RAINNC']    # ACCUMULATED TOTAL GRID SCALE PRECIPITATION [mm]
 				RR = R_accum[1:] - R_accum[:-1]		     # Take the difference to make it rain rate per timestep [mm/dt]	
 				# Append the first timestep to rain rate (all zeros) to keep the same shape
@@ -1057,7 +1057,7 @@ parent_dir = sys.argv[1]
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# Adjusted LH
-raw_folder_d02 = '/raw/d02_adjLH'
+raw_folder_d02 = '/raw/d02_swap'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 ## Output to level 1 directory:
