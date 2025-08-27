@@ -3,7 +3,7 @@
 #SBATCH -p radclouds
 ##SBATCH --dependency
 #SBATCH -N 1
-#SBATCH -n 56
+#SBATCH -n 1
 #SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
 ## c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
 #SBATCH --exclusive
@@ -31,11 +31,17 @@
 	# the parent dir that you want to run ncrcat (folder that has sub_dirs of raw, L1, L2, and L3)
 
 # If there exists a concat version of d01/d02, that means you can skip this post-processing step!
+# d01
 if [ -e "$1/raw/d01" ]; then
-	echo "Concat files already exist, moving on."
+	echo "d01 concat files already exist, moving on."
 else
-	ncrcat $1/raw/wrfout_d01* $1/raw/d01_adjLH
-	ncrcat $1/raw/wrfout_d02* $1/raw/d02_adjLH
+	ncrcat $1/raw/wrfout_d01* $1/raw/d01_swap			# Edit the end of d0# to the uniqueness of the experiment
+fi
+# d02
+if [ -e "$1/raw/d02" ]; then
+	echo "d02 concat files already exist, moving on."
+else
+	ncrcat $1/raw/wrfout_d02* $1/raw/d02_swap			# Edit the end of d0# to the uniqueness of the experiment
 fi
 
 
