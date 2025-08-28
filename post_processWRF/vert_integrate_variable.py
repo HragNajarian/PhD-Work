@@ -55,15 +55,19 @@ from wrf import default_fill
 #######################################################################################
 #######################################################################################
 
-## What variables would you like to integrate?
-L2_vars = ['QV', 'W']
+## What variables would you like to integrate? (i.e., ['QV','W'])
+L2_vars = ['QV']
 ## What pressure levels are you integrating between?
+    # Keep in hPa, '*100' converts to pascal
     # p_bot must be greater than p_top
-p_bot=[[1000,1000,1000], [1000,1000,500]]
-p_top=[[700,500,100], [700,100,200]]
+p_bot=[[1000,1000,1000], [1000,1000,500]]*100
+p_top=[[700,500,100], [700,100,200]]*100
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
+## This is the string that's added depending on the experiment (i.e., 'sunrise', 'swap', 'adjLH', or '' if ctrl)
+exp_string = 'swap' 
+
 
 #######################################################################################
 #######################################################################################
@@ -113,7 +117,7 @@ print('Created coordinate dictionaries \N{check mark}', step2_time-start1_time, 
 
 ## Create full paths of the variables to vertically integrate
 L2_dir = parent_dir + '/L2'
-prefix = 'd02_sunrise_interp_' if 'CRFoff' in parent_dir else 'd02_interp_'
+prefix = f'd02_{exp_string}_interp_'
 L2_var_files = {f"{prefix}{var}" for var in L2_vars}
 L2_paths = [os.path.join(L2_dir, f) for f in os.listdir(L2_dir) if f in L2_var_files]
 
@@ -128,7 +132,7 @@ for i, path in enumerate(L2_paths):
         # Important step over regions of terrain
     da = da.where(da != default_fill(np.float32))
     step2_time = time.perf_counter()
-    print('Open Data Set \N{check mark}', step2_time-step1_time, 'seconds')
+    print('Open Data Set \N{check mark}', step2_time-start2_time, 'seconds')
 
 
     ## Loop over the number of pressure layers you want to vertically integrate
@@ -149,7 +153,7 @@ for i, path in enumerate(L2_paths):
         )
 
         ## Save File
-        filename_prefix = 'd02_sunrise' if 'CRFoff' in parent_dir else 'd02'
+        filename_prefix = f'd02_{exp_string}'
         out_path = f"{parent_dir}/L4/{filename_prefix}_VI_{L2_vars[i]}_{p1}-{p2}"
         da_VI.to_netcdf(out_path, mode='w', format='NETCDF4')
         step2_time = time.perf_counter()
