@@ -45,6 +45,7 @@ Date: June 2023
 		# RTHRATSW == SW Radiative heating 				[K/s]
 		# RTHRATLWC == LW Radiative heating CLEAR SKY 	[K/s]
 		# RTHRATLW == LW Radiative heating 				[K/s]
+		# RH == Relative humidity						[%]
 			# 2D variables
         # RR == Rain rate 								[mm/dt], where dt is your timestep
         # HFX == Upward Heat Flux at Surface			[W/m^2]
@@ -407,6 +408,26 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			output_variable.setncatts(dataset.variables['RTHRATLW'].__dict__)
 			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
 				output_variable[t,...] = variable[t,...]
+			output_dataset.close()
+
+		# Relative humidity [%]
+		elif i == 'RH':
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_RH', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create the dimensions
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into the new nc file
+			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QVAPOR'].dimensions)
+			temp_atts = dataset.variables['P'].__dict__
+			temp_atts.update({'description':'Relative Humidity', 'units':'%'})
+			output_variable.setncatts(temp_atts)
+			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+				qv = dataset.variables['QVAPOR'][t,...]
+				pres = wrf.getvar(dataset, 'pres', timeidx=t, units='Pa', meta=False)
+				tkel = wrf.getvar(dataset, 'tk', timeidx=t, meta=False)
+				output_variable[t,...] = wrf.rh(qv, pres, tkel, meta=False)
 			output_dataset.close()
 
 		###############################################################################################
@@ -1048,8 +1069,8 @@ parent_dir = sys.argv[1]
 
 ## Pick the raw folders:
 	# Control
-# raw_folder_d02 = '/raw/d02'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+raw_folder_d02 = '/raw/d02'
+input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# CRF Off
 # raw_folder_d02 = '/raw/d02_sunrise'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
@@ -1057,19 +1078,19 @@ parent_dir = sys.argv[1]
 # raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
 # input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 	# Adjusted LH
-raw_folder_d02 = '/raw/d02_swap'
-input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02_swap'
+# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
 
 ## Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-variable_name = ['P', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-# variable_name = ['CAPE']
+# variable_name = ['P', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'RH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['RH']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
-# ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
-ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d02'
+ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
+# ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d02'
 
 
 ## Call on your function:

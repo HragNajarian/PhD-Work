@@ -31,6 +31,7 @@
 		# QG == Graupel mixing ratio 					[kg/kg]
         # CLDFRA == Cloud Fraction                      [0-1]
 		# Theta == Potential Temperature                [K]
+        # RH = Relative humidity                        [%]
 		# H_DIABATIC == Microphysics Latent heating     [K/s]
 		# SWClear / RTHRATSWC == SW Radiative heating CLEAR SKY 	[K/s]
 		# SWAll / RTHRATSW == SW Radiative heating 				    [K/s]
@@ -86,17 +87,17 @@ parent_dir = sys.argv[1]
 
 ## Pick the raw folders:
 # raw_folder_d01 = '/raw/d01'               # Path to the raw input netCDF file
-# raw_folder_d02 = '/raw/d02'               # Path to the raw input netCDF file
+raw_folder_d02 = '/raw/d02'               # Path to the raw input netCDF file
 # raw_folder_d02 = '/raw/d02_sunrise'       # Path to stitched raw CRFoff files
-raw_folder_d02 = '/raw/d02_swap'         # Path to the raw input netCDF file
+# raw_folder_d02 = '/raw/d02_swap'         # Path to the raw input netCDF file
 input_file_d02 = parent_dir + raw_folder_d02
 
 
 ## Where does your 3-D pressure file live
 # pressure_file_d01 = parent_dir + '/L1/d01_P'
-# pressure_file_d02 = parent_dir + '/L1/d02_P'
+pressure_file_d02 = parent_dir + '/L1/d02_P'
 # pressure_file_d02 = parent_dir + '/L1/d02_sunrise_P'
-pressure_file_d02 = parent_dir + '/L1/d02_swap_P'
+# pressure_file_d02 = parent_dir + '/L1/d02_swap_P'
 
 
 ## Output to level 2 directory:
@@ -125,7 +126,8 @@ var_info = {
     'SWClear':      {'wrf_name': 'RTHRATSWC',  'wrfpy_name': None,     'ref_dim': 'RTHRATSWC'},
     'SWAll':        {'wrf_name': 'RTHRATSW',   'wrfpy_name': None,     'ref_dim': 'RTHRATSW'},
     'LWClear':      {'wrf_name': 'RTHRATLWC',  'wrfpy_name': None,     'ref_dim': 'RTHRATLWC'},
-    'LWAll':        {'wrf_name': 'RTHRATLW',   'wrfpy_name': None,     'ref_dim': 'RTHRATLW'}
+    'LWAll':        {'wrf_name': 'RTHRATLW',   'wrfpy_name': None,     'ref_dim': 'RTHRATLW'},
+    'RH':           {'wrf_name': '',           'wrfpy_name': None,     'ref_dim': 'QVAPOR'},
 }
 
 # Open the input netCDF file
@@ -135,8 +137,8 @@ pressure_dataset = nc.Dataset(pressure_file_d02, 'r')
 P_var = pressure_dataset.variables['P']    # Pressure [hPa]
 
 # Declare variables to interpolate (they must exist in 'var_info')
-variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll']
-# variables_to_process = ['W']
+# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH']
+variables_to_process = ['RH']
 
 
 ###############################################################################################################
@@ -173,6 +175,11 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         template_atts = dataset.variables[wrf_name].__dict__
         template_atts.update({'stagger': '', 'coordinates': 'XLONG XLAT XTIME'})
         output_variable.setncatts(template_atts)
+    # Create new atts for RH absed on P
+    elif variable_name in ['RH']:
+        template_atts = dataset.variables['P'].__dict__
+        template_atts.update({'description':'Relative Humidity', 'units':'%'})
+        output_variable.setncatts(template_atts)
     else:
         output_variable.setncatts(dataset.variables[wrf_name].__dict__)
 
@@ -186,6 +193,15 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         for t in range(n_times):
             var = wrf.getvar(dataset, wrfpy_name, timeidx=t, meta=False)
             var.set_fill_value(fill_value)
+            interp = wrf.interplevel(var, P_var[t,...], vertical_levels, meta=False, missing=fill_value)
+            output_variable[t,...] = interp
+            print(f'Time index {t} stored')
+    elif variable_name in ['RH']:
+        for t in range(n_times):
+            qv = dataset.variables['QVAPOR'][t]
+            pres = P_var[t,...]/100 # Convert from hPa to Pa
+            tkel = wrf.getvar(dataset, 'tk', timeidx=t, meta=False)
+            var = wrf.rh(qv, pres, tkel, meta=False)
             interp = wrf.interplevel(var, P_var[t,...], vertical_levels, meta=False, missing=fill_value)
             output_variable[t,...] = interp
             print(f'Time index {t} stored')
