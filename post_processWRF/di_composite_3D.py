@@ -19,9 +19,9 @@ from wrf import default_fill
 #######################################################################################
 
 ## What 3-D variables would you like to diurnally coposite?
-L2_vars = ['W']
+L2_vars = ['Temp']
 ## Slice lat and lon bounds set for diurnal calculations
-lat_bound = [-10, 5]
+lat_bound = [-10, 10]
 lon_bound = [80, 135]
 interp_P_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))  # Should be in hPa
 rolls = 1   # Smoother
@@ -29,6 +29,10 @@ rolls = 1   # Smoother
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
 time_bound = [np.datetime64('2015-11-23T01'), np.datetime64('2015-12-02T00')] if '2015-11-22-12' in parent_dir else [np.datetime64('2015-12-10T01'), np.datetime64('2015-12-20T00')]
+## This is the string that's added depending on the experiment 
+    # (i.e., '_sunrise', '_swap', '_adjLH', 
+    # or '' if ctrl)
+exp_string = '_swap'
 
 #######################################################################################
 #######################################################################################
@@ -196,7 +200,7 @@ def without_keys(d, keys):
 start1_time = time.perf_counter()
 
 ## Assign bottom_top coordinates to make computations simpler using xarray
-raw_file = 'd02_sunrise' if 'CRFoff' in parent_dir else 'd02'
+raw_file = f'd02{exp_string}'
 time_ind, lat_ind, lon_ind = isel_ind(build_path(parent_dir, "raw", raw_file), time_bound, lat_bound, lon_bound)
 ds_raw = open_ds(build_path(parent_dir, "raw", raw_file), time_ind, lat_ind, lon_ind)
 step1_time = time.perf_counter()
@@ -227,7 +231,8 @@ print('Created coordinate dictionaries \N{check mark}', step2_time-step1_time, '
 
 ## Create full paths of the variables to vertically integrate
 L2_dir = parent_dir + '/L2'
-prefix = 'd02_sunrise_interp_' if 'CRFoff' in parent_dir else 'd02_interp_'
+
+prefix = f'd02{exp_string}_interp_'
 L2_var_files = {f"{prefix}{var}" for var in L2_vars}
 L2_paths = [os.path.join(L2_dir, f) for f in os.listdir(L2_dir) if f in L2_var_files]
 
@@ -259,7 +264,7 @@ for i, path in enumerate(L2_paths):
 		da_di[:,j] = da_di_z
 
 	## Assign coordinates before saving as an .nc file
-	da_di = xr.DataArray(da_di, name='W', coords=di_coords, dims=('hour', 'bottom_top', 'south_north', 'west_east'))
+	da_di = xr.DataArray(da_di, name=L2_vars[i], coords=di_coords, dims=('hour', 'bottom_top', 'south_north', 'west_east'))
 
 	## Assign attributes
 	da_di = da_di.assign_attrs(
@@ -271,7 +276,7 @@ for i, path in enumerate(L2_paths):
 		Time_Bounds=f'{time_bound[0]} to {time_bound[1]}')
 
 	## Save File
-	out_path = f'{parent_dir}/L4/{L2_vars[i]}_di_sunrise' if 'CRFoff' in parent_dir else f'{parent_dir}/L4/{L2_vars[i]}_di_ctrl'
+	out_path = f'{parent_dir}/L4/{L2_vars[i]}_di_ctrl' if exp_string=='' else f'{parent_dir}/L4/{L2_vars[i]}_di{exp_string}'
 	da_di.to_netcdf(path=out_path, mode='w', format='NETCDF4', compute=True) #  ,unlimited_dims='Time'
 	step2_time = time.perf_counter()
 	print(f'{L2_vars[i]} saved \N{check mark}', step2_time-start1_time, 'seconds')

@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# In[1]:
+
+
+'''
+Author: Hrag Najarian
+Date: June 2023
+'''
+
+
 # In[ ]:
 
 
