@@ -169,7 +169,7 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
     
     # Output file naming
     level_suffix = str(vertical_levels) if levels == 1 else ''
-    output_path = f"{output_dir}{file_name}_interp_{variable_name}{level_suffix}"
+    output_path = f"{output_dir}{file_name}_interp_{variable_name}{level_suffix}" if variable_name not in ['LowCLDFRA','MidCLDFRA','HighCLDFRA'] else f"{parent_dir}/L1/{file_name}{variable_name}{level_suffix}"
     output_dataset = nc.Dataset(output_path, 'w', clobber=True)
     output_dataset.setncatts(dataset.__dict__)
 
@@ -179,7 +179,8 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         output_dataset.createDimension(dim_name, size)
 
     # Create variable and copy attributes
-    output_variable = output_dataset.createVariable(variable_name, 'f4', dataset.variables[ref_var].dimensions)  # 'f4' == float32
+    var_name = variable_name if variable_name not in ['LowCLDFRA','MidCLDFRA','HighCLDFRA'] else var_name = 'CLDFRA'
+    output_variable = output_dataset.createVariable(var_name, 'f4', dataset.variables[ref_var].dimensions)  # 'f4' == float32
     # Update staggered attributes to unstaggered
     if variable_name in ['U','V','W']:
         template_atts = dataset.variables[wrf_name].__dict__
@@ -236,7 +237,7 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
             case 'HighCLDFRA':
                 lower_layer, upper_layer = 440, 150
         # Must use the interpolated CLDFRA
-        input_file = parent_dir + f'/L2/d02{exp_string}_interp_CLDFRA'
+        input_file = f'{parent_dir}/L2/d02{exp_string}_interp_CLDFRA'
         ds = nc.Dataset(input_file, 'r')
         var = layer_weighted_average(ds, lower_layer=lower_layer, upper_layer=upper_layer, vertical_levels=vertical_levels)
         output_variable[:] = var[:]	# not a large variable so no need to loop
