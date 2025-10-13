@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --job-name=rh_bin_rad_heating
+#SBATCH -p radclouds
+##SBATCH --dependency=afterok:26362039
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+## c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+mamba init
+mamba activate WRF_Xarray 
+python -u /home/hragnajarian/PhD/post_processWRF/rh_binned_radiative_heating.py $1		# $1 is the parent_dir where directories raw, L1, L2, and L3 are located
