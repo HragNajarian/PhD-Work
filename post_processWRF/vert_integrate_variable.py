@@ -56,17 +56,21 @@ from wrf import default_fill
 #######################################################################################
 
 ## What variables would you like to integrate? (i.e., ['QV','W'])
-L2_vars = ['QV']
+L2_vars = ['QV','W']
 ## What pressure levels are you integrating between?
     # Keep in hPa, '*100' converts to pascal
     # p_bot must be greater than p_top
-p_bot=[[1000,1000,1000], [1000,1000,500]]*100
-p_top=[[700,500,100], [700,100,200]]*100
+p_bot=[[1000,1000,1000]]*100#, [1000,1000,500]]*100
+p_top=[[700,500,100]]*100#, [700,100,200]]*100
+
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
-## This is the string that's added depending on the experiment (i.e., 'sunrise', 'swap', 'adjLH', or '' if ctrl)
-exp_string = 'swap' 
+
+## This is the string that's added depending on the experiment 
+    # (i.e., '_sunrise', '_swap', '_adjLH', 
+    # or '' if ctrl)
+exp_string = '_swap'
 
 
 #######################################################################################
@@ -117,7 +121,7 @@ print('Created coordinate dictionaries \N{check mark}', step2_time-start1_time, 
 
 ## Create full paths of the variables to vertically integrate
 L2_dir = parent_dir + '/L2'
-prefix = f'd02_{exp_string}_interp_'
+prefix = f'd02{exp_string}_interp_'
 L2_var_files = {f"{prefix}{var}" for var in L2_vars}
 L2_paths = [os.path.join(L2_dir, f) for f in os.listdir(L2_dir) if f in L2_var_files]
 
@@ -153,7 +157,7 @@ for i, path in enumerate(L2_paths):
         )
 
         ## Save File
-        filename_prefix = f'd02_{exp_string}'
+        filename_prefix = f'd02{exp_string}'
         out_path = f"{parent_dir}/L4/{filename_prefix}_VI_{L2_vars[i]}_{p1}-{p2}"
         da_VI.to_netcdf(out_path, mode='w', format='NETCDF4')
         step2_time = time.perf_counter()

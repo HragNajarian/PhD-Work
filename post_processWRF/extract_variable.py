@@ -1056,37 +1056,27 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 ## Pick the main folder:
 	# i.e. parent_dir = '/where/your/wrfoutfiles/exist'
 parent_dir = sys.argv[1]
-# Examples:
-	# Control where icloud=1
-	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
-	# NCRF where icloud=0
-	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
-	# NCRF where icloud=0 over ocean only
-	# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff_Ocean'
+# Example:
+    # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/swap_rh/norst'
 
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/CRFoff'
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
+## This is the string that's added depending on the experiment 
+    # (i.e., '_sunrise', '_swap', '_adjLH', 
+    # or '' if ctrl)
+exp_string = '_swap'
+
 
 ## Pick the raw folders:
-	# Control
-raw_folder_d02 = '/raw/d02'
+raw_folder_d02 = f'/raw/d02{exp_string}'
 input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-	# CRF Off
-# raw_folder_d02 = '/raw/d02_sunrise'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-	# CRF Off Ensemble
-# raw_folder_d02 = '/raw_ens/d02_sunrise_ens'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
-	# Adjusted LH
-# raw_folder_d02 = '/raw/d02_swap'
-# input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF file
+
 
 ## Output to level 1 directory:
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
+
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'RH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['RH']
+variable_name = ['P', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'RH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
 ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
