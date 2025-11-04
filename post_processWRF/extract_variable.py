@@ -1079,8 +1079,8 @@ variable_name = ['P', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'RH', 'SMOIS', 'TS
 
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
-ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
-# ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d02'
+# ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
+ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/raw/d02'
 
 
 ## Call on your function:

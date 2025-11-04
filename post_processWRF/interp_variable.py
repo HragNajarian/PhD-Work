@@ -111,7 +111,7 @@ output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 
 
 ## Declare the vertial levels you want to interpolate:
-# vertical_levels = np.array(1000)
+# vertical_levels = np.array(850)
 # vertical_levels = np.arange(1000,0,-50)
 vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
@@ -149,7 +149,6 @@ P_var = pressure_dataset.variables['P']    # Pressure [hPa]
 # Declare variables to interpolate (they must exist in 'var_info')
 variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
 
-
 ###############################################################################################################
 ###############################################################################################################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ USER INPUTS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
@@ -169,7 +168,7 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
     
     # Output file naming
     level_suffix = str(vertical_levels) if levels == 1 else ''
-    output_path = f"{output_dir}{file_name}_interp_{variable_name}{level_suffix}" if variable_name not in ['LowCLDFRA','MidCLDFRA','HighCLDFRA'] else f"{parent_dir}/L1/{file_name}{variable_name}{level_suffix}"
+    output_path = f"{output_dir}{file_name}_interp_{variable_name}{level_suffix}" if variable_name not in ['LowCLDFRA','MidCLDFRA','HighCLDFRA'] else f"{parent_dir}/L1/{file_name}_{variable_name}{level_suffix}"
     output_dataset = nc.Dataset(output_path, 'w', clobber=True)
     output_dataset.setncatts(dataset.__dict__)
 
@@ -179,7 +178,7 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         output_dataset.createDimension(dim_name, size)
 
     # Create variable and copy attributes
-    var_name = variable_name if variable_name not in ['LowCLDFRA','MidCLDFRA','HighCLDFRA'] else var_name = 'CLDFRA'
+    var_name = variable_name if variable_name not in ['LowCLDFRA','MidCLDFRA','HighCLDFRA'] else 'CLDFRA'
     output_variable = output_dataset.createVariable(var_name, 'f4', dataset.variables[ref_var].dimensions)  # 'f4' == float32
     # Update staggered attributes to unstaggered
     if variable_name in ['U','V','W']:

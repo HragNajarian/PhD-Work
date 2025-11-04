@@ -32,13 +32,13 @@
 
 # If there exists a concat version of d01/d02, that means you can skip this post-processing step!
 # d01
-if [ -e "$1/raw/d01" ]; then
+if [ -e "$1/raw/d01*" ]; then
 	echo "d01 concat files already exist, moving on."
 else
 	ncrcat $1/raw/wrfout_d01* $1/raw/d01_swap			# Edit the end of d0# to the uniqueness of the experiment
 fi
 # d02
-if [ -e "$1/raw/d02" ]; then
+if [ -e "$1/raw/d02*" ]; then
 	echo "d02 concat files already exist, moving on."
 else
 	ncrcat $1/raw/wrfout_d02* $1/raw/d02_swap			# Edit the end of d0# to the uniqueness of the experiment

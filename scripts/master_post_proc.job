@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=mas_post
-##SBATCH --dependency=afterok:25060246
+##SBATCH --dependency=afterok:26347865
 #SBATCH -p radclouds
 #SBATCH -N 1
 #SBATCH -n 1
