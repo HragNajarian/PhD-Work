@@ -67,11 +67,11 @@
  sf_urban_physics                    = 0, 0,
  isftcflx                            = 0,
  do_radar_ref                        = 0,
- grav_settling      = 0, 0,
- sst_update         = 1,
- sst_skin           = 1,
- isfflx             = 1,
- ifsnow             = 0,
+ grav_settling                       = 0, 0,
+ sst_update                          = 1,
+ sst_skin                            = 1,
+ isfflx                              = 1,
+ ifsnow                              = 0,
  /
 
  &fdda
