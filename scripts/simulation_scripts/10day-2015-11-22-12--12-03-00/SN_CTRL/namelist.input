@@ -1,20 +1,20 @@
  &time_control
  start_year = 2015, 2015, 
- start_month = 12, 12, 
- start_day = 09, 09,
+ start_month = 11, 11, 
+ start_day = 22, 22,
  start_hour = 12, 12,
  end_year = 2015, 2015,
  end_month = 12, 12,
- end_day = 20, 20,
+ end_day = 03, 03,
  end_hour = 00, 00,
  interval_seconds                    = 3600
  input_from_file                     = .true., .true.,
  history_interval                    = 60,  60,
  frames_per_outfile                  = 1, 1,
  write_hist_at_0h_rst                = .true.,
- restart = .false.,
- restart_interval = 1440,
- iofields_filename 		     = "var_extra_output",  "var_extra_output"
+ restart                             = .false.,
+ restart_interval                    = 1440,
+ iofields_filename 		             = "var_extra_output",  "var_extra_output"
  io_form_history                     = 2
  io_form_restart                     = 2
  io_form_input                       = 2
@@ -76,23 +76,22 @@
  /
 
  &fdda
- grid_fdda                           = 2,        2,
+ grid_fdda                           = 2,        0,
  gfdda_inname                        = "wrffdda_d<domain>",
- gfdda_interval_m                    = 60,       60,           ! Minutes
- gfdda_end_h                         = 999,      999,          ! Hours
+ gfdda_interval_m                    = 60,       0,           ! Minutes
+ gfdda_end_h                         = 999,      0,           ! Hours
  io_form_gfdda                       = 2,
  fgdt                                = 0,        0,
  if_no_pbl_nudging_uv                = 1,        1,            ! 1=off
  if_no_pbl_nudging_t                 = 1,        1,
  if_no_pbl_nudging_q                 = 1,        1,
  if_no_pbl_nudging_ph                = 1,        1,
- xwavenum                            = 6,        4,            ! domain distance / 1000km = wavenum (https://doi.org/10.5194/gmd-14-2827-2021)
- ywavenum                            = 4,        3,            ! 
- guv                                 = 0.0003,   0.0003,       ! s^-1
+ xwavenum                            = 6,        0,            ! domain distance / 1000km = wavenum (https://doi.org/10.5194/gmd-14-2827-2021)
+ ywavenum                            = 4,        0,            ! 
+ guv                                 = 0.0003,   0.0,          ! s^-1, make sure frequency matches close enough to the frequency of met_em files
  gt                                  = 0.0,      0.0,          ! s^-1
  gph                                 = 0.0,      0.0,          ! s^-1
- gq                                  = 0.0003,   0.0003,       ! s^-1
-
+ gq                                  = 0.0003,   0.0,          ! s^-1
  /
 
  &dynamics
