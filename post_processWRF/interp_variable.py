@@ -94,7 +94,7 @@ parent_dir = sys.argv[1]
 ## This is the string that's added depending on the experiment 
     # (i.e., '_sunrise', '_swap', '_adjLH', 
     # or '' if ctrl)
-exp_string = '_swap'
+exp_string = ''
 
 
 ## Pick the raw folders:
@@ -111,9 +111,9 @@ output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 
 
 ## Declare the vertial levels you want to interpolate:
-# vertical_levels = np.array(850)
+vertical_levels = np.array(850)
 # vertical_levels = np.arange(1000,0,-50)
-vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
 
 var_info = {
@@ -147,7 +147,10 @@ pressure_dataset = nc.Dataset(pressure_file_d02, 'r')
 P_var = pressure_dataset.variables['P']    # Pressure [hPa]
 
 # Declare variables to interpolate (they must exist in 'var_info')
-variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
+# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
+# variables_to_process = ['U', 'V', 'QV', 'CLDFRA', 'LowCLDFRA', 'MidCLDFRA', 'HighCLDFRA']
+variables_to_process = ['U']
+
 
 ###############################################################################################################
 ###############################################################################################################

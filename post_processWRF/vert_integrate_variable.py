@@ -56,7 +56,7 @@ from wrf import default_fill
 #######################################################################################
 
 ## What variables would you like to integrate? (i.e., ['QV','W'])
-L2_vars = ['QV','W']
+L2_vars = ['QV']
 ## What pressure levels are you integrating between?
     # Keep in hPa, '*100' converts to pascal
     # p_bot must be greater than p_top
@@ -70,7 +70,7 @@ parent_dir = sys.argv[1]
 ## This is the string that's added depending on the experiment 
     # (i.e., '_sunrise', '_swap', '_adjLH', 
     # or '' if ctrl)
-exp_string = '_swap'
+exp_string = ''
 
 
 #######################################################################################
