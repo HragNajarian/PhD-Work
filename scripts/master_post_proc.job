@@ -29,10 +29,16 @@ sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_extract_id}" "/ho
 export job_run_interp_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_interp.job" $1|tr -d -c 0-9)
 echo "interp Job ID: ${job_run_interp_id}"
 
+# Vertically Integrate
+sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_VI.job"
+export job_run_VI_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_VI.job" $1|tr -d -c 0-9)
+echo "VI Job ID: ${job_run_VI_id}"
+
 # # Cross-section
 # sed -i "/--dependency/c\#SBATCH --dependency=afterok:${job_run_interp_id}" "/home/hragnajarian/PhD/scripts/run_cross_section.job"
 # export job_run_cross_section_id=$(sbatch "/home/hragnajarian/PhD/scripts/run_cross_section.job" $1|tr -d -c 0-9)
 # echo "cross Job ID: ${job_run_cross_section_id}"
+
 
 
 ###################################################################################################################################
