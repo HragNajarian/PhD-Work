@@ -58,10 +58,12 @@ from wrf import default_fill
 ## What variables would you like to integrate? (i.e., ['QV','W'])
 L2_vars = ['QV']
 ## What pressure levels are you integrating between?
-    # Keep in hPa, '*100' converts to pascal
+    # Keep in hPa, and '*100' converts to pascal within the function
     # p_bot must be greater than p_top
-p_bot=[[1000,1000,1000]]*100#, [1000,1000,500]]*100
-p_top=[[700,500,100]]*100#, [700,100,200]]*100
+# p_bot=[[1000,1000,1000]]    #, [1000,1000,500]]
+# p_top=[[700,500,100]]       #, [700,100,200]]
+p_bot=[[1000]]    #, [1000,1000,500]]
+p_top=[[100]]     #, [700,100,200]]
 
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
@@ -93,7 +95,7 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
     """
 
     # Calculate the pressure difference
-    dp = da.bottom_top.diff('bottom_top').sel(bottom_top=slice(p_bot, p_top))
+    dp = da.bottom_top.diff('bottom_top').sel(bottom_top=slice(p_bot, p_top))*100
 
     # Calculate mean value between levels
     da_roll = da.rolling(bottom_top=2).mean().sel(bottom_top=dp.bottom_top.values)
