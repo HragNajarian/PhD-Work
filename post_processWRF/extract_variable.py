@@ -38,6 +38,7 @@ Date: June 2023
 		# QG == Graupel mixing ratio 					[kg/kg]
 		# CLDFRA == Cloud Fraction
 		# Theta == Potential Temperature 				[K]
+		# Temperature == Temperature					[K]
 		# H_DIABATIC == Microphysics Latent heating 	[K/s]
 		# CAPE == Convective available potential energy	[J/kg]
 		# CIN == Convective Inhibition 					[J/kg]
@@ -295,8 +296,8 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 		
 		# Potential Temperature [K]
 		elif i == 'Theta':	# The variable provided by WRF is actually perturbation potential temperature
-						# so we will have to convert it to potential temperature by adding 300
-							# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
+								# so we will have to convert it to potential temperature by adding 300
+								# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
 			variable = dataset.variables['T']    # Potential Temperature [K]
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + file_name + '_Theta', 'w', clobber=True)
@@ -310,6 +311,47 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
 				output_variable[t,...] = variable[t,...] + 300	# Add 300 to convert perturb theta to theta
 			output_dataset.close()
+		
+		# Temperature [K]
+		elif i == 'Temperature':	# The variable provided by WRF is actually perturbation potential temperature
+										# so we will have to convert it to potential temperature by adding 300 before converting into temperature
+										# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
+			def theta_to_temp(theta, p, psfc):
+				# PT = T * (P0/P)^(R/Cp)
+					# PT = Potential temperature/theta
+					# T = Temperature
+					# P0 = surface pressure (hPa)
+					# P = Pressure
+					# R = Gas constant for air (287.052874 J/(kg*K))
+					# Cp = Specific heat capacity at constant pressure (1003.5 J/(kg*K))
+						# R/Cp = 0.286
+				# so
+				# T = PT / (P0/P)^(0.286)
+				temp = theta / (psfc/p)**0.286
+				return temp
+			
+			# Make sure pressure file has been extracted first
+			dataset_P = nc.Dataset(output_dir+'d02_P', 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
+			pressure = dataset_P.variables['P']				# Pressure (hPa), already converted to hPa
+			perturb_theta = dataset.variables['T']    		# Perturbation Potential Temperature [K]
+			sfc_pressure = dataset.variables['PSFC']		# Surface Pressure (Pa), convert to hPa below by dividing by 100
+			# Create new .nc file
+			output_dataset = nc.Dataset(output_dir + file_name + '_Temperature', 'w', clobber=True)
+			output_dataset.setncatts(dataset.__dict__)
+			# Create the dimensions
+			for dim_name, dim in dataset.dimensions.items():
+				output_dataset.createDimension(dim_name, len(dim))
+			# Create the variable, set attributes, and copy the variable into the new nc file
+			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['T'].dimensions)
+			temp_atts = dataset.variables['T'].__dict__
+			temp_atts.update({'description': 'Temperature'})
+			output_variable.setncatts(temp_atts)
+			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+				output_variable[t,...] = theta_to_temp(perturb_theta[t,...]+300, pressure[t,...], sfc_pressure[t,...]/100)	
+			# Close the output files
+			dataset_P.close()
+			output_dataset.close()
+			
 
 		# Latent Heating [K/s]
 		elif i == 'H_DIABATIC':
@@ -1075,9 +1117,8 @@ output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 
 ## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10', 'HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['P', 'RR', 'HFX', 'QFX', 'LH', 'U10', 'V10', 'HGT', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-
+# variable_name = ['P', 'Temperature', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'RH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['Temperature']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
 # ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'
