@@ -39,6 +39,8 @@ Date: June 2023
 		# CLDFRA == Cloud Fraction
 		# Theta == Potential Temperature 				[K]
 		# Temperature == Temperature					[K]
+		# es == Saturation Vapor Pressure				[hPa]
+		# ws == Saturation Vapor Mixing Ratio			[kg/kg]
 		# H_DIABATIC == Microphysics Latent heating 	[K/s]
 		# CAPE == Convective available potential energy	[J/kg]
 		# CIN == Convective Inhibition 					[J/kg]
@@ -120,7 +122,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 		######################################## 3-D Variables #######################################
 		##############################################################################################
 
-		# Pressure
+		# Pressure [hPa]
 		if i == 'P':
 			# Create new .nc file we can write to and name it appropriately
 			output_dataset = nc.Dataset(output_dir + file_name + '_P', 'w', clobber=True)
@@ -138,7 +140,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				output_variable[t,...] = variable[:]
 			output_dataset.close()	# Make sure you close the .nc file
 
-		# Zonal Wind
+		# Zonal Wind [m/s]
 		elif i == 'U':
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + file_name + '_U', 'w', clobber=True)
@@ -160,7 +162,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				output_variable[t,...] = variable[:]
 			output_dataset.close()
 
-		# Meridional Wind
+		# Meridional Wind [m/s]
 		elif i == 'V':
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + file_name + '_V', 'w', clobber=True)
@@ -182,7 +184,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				output_variable[t,...] = variable[:]
 			output_dataset.close()
 		
-		# Water Vapor mixing ratio
+		# Water Vapor mixing ratio [kg/kg]
 		elif i == 'QV':
 			variable = dataset.variables['QVAPOR']    # Water vapor mixing ratio [kg/kg]
 			# Create new .nc file
@@ -312,10 +314,114 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				output_variable[t,...] = variable[t,...] + 300	# Add 300 to convert perturb theta to theta
 			output_dataset.close()
 		
-		# Temperature [K]
-		elif i == 'Temperature':	# The variable provided by WRF is actually perturbation potential temperature
-										# so we will have to convert it to potential temperature by adding 300 before converting into temperature
-										# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
+		# # Temperature [K]
+		# elif i == 'Temperature':	# The variable provided by WRF is actually perturbation potential temperature
+		# 								# so we will have to convert it to potential temperature by adding 300 before converting into temperature
+		# 								# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
+		# 	def theta_to_temp(theta, p, psfc):
+		# 		# PT = T * (P0/P)^(R/Cp)
+		# 			# PT = Potential temperature/theta
+		# 			# T = Temperature
+		# 			# P0 = surface pressure (hPa)
+		# 			# P = Pressure
+		# 			# R = Gas constant for air (287.052874 J/(kg*K))
+		# 			# Cp = Specific heat capacity at constant pressure (1003.5 J/(kg*K))
+		# 				# R/Cp = 0.286
+		# 		# so
+		# 		# T = PT / (P0/P)^(0.286)
+		# 		temp = theta / (psfc/p)**0.286
+		# 		return temp
+			
+		# 	# Make sure pressure ('P') has been extracted first
+		# 	dataset_P = nc.Dataset(output_dir+'d02_P', 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
+		# 	pressure = dataset_P.variables['P']				# Pressure (hPa), already converted to hPa
+		# 	perturb_theta = dataset.variables['T']    		# Perturbation Potential Temperature [K]
+		# 	sfc_pressure = dataset.variables['PSFC']		# Surface Pressure (Pa), convert to hPa below by dividing by 100
+		# 	# Create new .nc file
+		# 	output_dataset = nc.Dataset(output_dir + file_name + '_Temperature', 'w', clobber=True)
+		# 	output_dataset.setncatts(dataset.__dict__)
+		# 	# Create the dimensions
+		# 	for dim_name, dim in dataset.dimensions.items():
+		# 		output_dataset.createDimension(dim_name, len(dim))
+		# 	# Create the variable, set attributes, and copy the variable into the new nc file
+		# 	output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['T'].dimensions)
+		# 	temp_atts = dataset.variables['T'].__dict__
+		# 	temp_atts.update({'description': 'Temperature'})
+		# 	output_variable.setncatts(temp_atts)
+		# 	for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+		# 		output_variable[t,...] = theta_to_temp(perturb_theta[t,...]+300, pressure[t,...], sfc_pressure[t,...]/100)	
+		# 	# Close the output files
+		# 	dataset_P.close()
+		# 	output_dataset.close()
+		
+		# # Saturation Vapor Pressure [hPa]
+		# elif i == 'es':
+		# 	def saturation_vapor_pressure_mk(Tk):
+		# 		"""
+		# 		Saturation vapor pressure (hPa) using Murphy & Koop (2005).
+		# 		Input temperature must be in Kelvin.
+
+		# 		Returns es (hPa), using:
+		# 		- Over water for T >= 273.15 K
+		# 		- Over ice for T < 273.15 K
+		# 		"""
+		# 		# Covnert into np.array()
+		# 		Tk = np.asarray(Tk)
+
+		# 		# Murphy & Koop (2005) - over water
+		# 		# ln(ew) = 54.842763 - 6763.22/T - 4.21*ln(T) + 0.000367*T
+		# 		ln_ew = (
+		# 			54.842763
+		# 			- 6763.22 / Tk
+		# 			- 4.21 * np.log(Tk)
+		# 			+ 0.000367 * Tk
+		# 			+ np.tanh(0.0415 * (Tk - 218.8))
+		# 			* (53.878 - 1331.22 / Tk - 9.44523 * np.log(Tk) + 0.014025 * Tk)
+		# 		)
+		# 		ew = np.exp(ln_ew)  # Pa
+
+		# 		# Murphy & Koop (2005) - over ice
+		# 		# ln(ei) = 9.550426 - 5723.265/T + 3.53068*ln(T) - 0.00728332*T
+		# 		ln_ei = (
+		# 			9.550426
+		# 			- 5723.265 / Tk
+		# 			+ 3.53068 * np.log(Tk)
+		# 			- 0.00728332 * Tk
+		# 		)
+		# 		ei = np.exp(ln_ei)  # Pa
+
+		# 		# Choose phase based on freezing point
+		# 		es_pa = np.where(Tk >= 273.15, ew, ei)
+
+		# 		# Convert Pa → hPa
+		# 		return es_pa * 0.01
+
+		# 	# Make sure pressure and PSFC file have been extracted first
+		# 	dataset_temp = nc.Dataset(output_dir+'d02_Temperature', 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
+		# 	temperature = dataset_temp.variables['Temperature']				# Pressure (hPa), already converted to hPa
+		# 	# Create new .nc file
+		# 	output_dataset = nc.Dataset(output_dir + file_name + '_es', 'w', clobber=True)
+		# 	output_dataset.setncatts(dataset.__dict__)
+		# 	# Create the dimensions
+		# 	for dim_name, dim in dataset.dimensions.items():
+		# 		output_dataset.createDimension(dim_name, len(dim))
+		# 	# Create the variable, set attributes, and copy the variable into the new nc file
+		# 	output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QVAPOR'].dimensions)
+		# 	temp_atts = dataset.variables['QVAPOR'].__dict__
+		# 	temp_atts.update({'description': 'Saturation vapor pressure', 'units':'hPa'})
+		# 	output_variable.setncatts(temp_atts)
+		# 	for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
+		# 		output_variable[t,...] = saturation_vapor_pressure_mk(temperature[t,...])
+		# 	# Close the output files
+		# 	dataset_temp.close()
+		# 	output_dataset.close()
+
+		# Saturation Vapor Mixing Ratio [kg/kg]
+		elif i == 'ws':
+			
+			# The variable provided by WRF is actually perturbation potential temperature
+				# so we will have to convert it to potential temperature by adding 300 before converting into temperature
+				# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
 			def theta_to_temp(theta, p, psfc):
 				# PT = T * (P0/P)^(R/Cp)
 					# PT = Potential temperature/theta
@@ -330,28 +436,90 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				temp = theta / (psfc/p)**0.286
 				return temp
 			
-			# Make sure pressure file has been extracted first
-			dataset_P = nc.Dataset(output_dir+'d02_P', 'r')	# 'r' is just to read the dataset, we do NOT want write privledges
-			pressure = dataset_P.variables['P']				# Pressure (hPa), already converted to hPa
-			perturb_theta = dataset.variables['T']    		# Perturbation Potential Temperature [K]
-			sfc_pressure = dataset.variables['PSFC']		# Surface Pressure (Pa), convert to hPa below by dividing by 100
+			def saturation_vapor_pressure_mk(Tk):
+				"""
+				Saturation vapor pressure (hPa) using Murphy & Koop (2005).
+				Input temperature must be in Kelvin.
+
+				Returns es (hPa), using:
+				- Over water for T >= 273.15 K
+				- Over ice for T < 273.15 K
+				"""
+				# Covnert into np.array()
+				Tk = np.asarray(Tk)
+
+				# Murphy & Koop (2005) - over water
+				# ln(ew) = 54.842763 - 6763.22/T - 4.21*ln(T) + 0.000367*T
+				ln_ew = (
+					54.842763
+					- 6763.22 / Tk
+					- 4.21 * np.log(Tk)
+					+ 0.000367 * Tk
+					+ np.tanh(0.0415 * (Tk - 218.8))
+					* (53.878 - 1331.22 / Tk - 9.44523 * np.log(Tk) + 0.014025 * Tk)
+				)
+				ew = np.exp(ln_ew)  # Pa
+
+				# Murphy & Koop (2005) - over ice
+				# ln(ei) = 9.550426 - 5723.265/T + 3.53068*ln(T) - 0.00728332*T
+				ln_ei = (
+					9.550426
+					- 5723.265 / Tk
+					+ 3.53068 * np.log(Tk)
+					- 0.00728332 * Tk
+				)
+				ei = np.exp(ln_ei)  # Pa
+
+				# Choose phase based on freezing point
+				es_pa = np.where(Tk >= 273.15, ew, ei)
+
+				# Convert Pa → hPa
+				return es_pa * 0.01
+
+			def saturation_mixing_ratio(e_s, p):
+				"""
+				Compute saturation vapor mixing ratio (kg/kg).
+				
+				Parameters
+				----------
+				e_s : array or float
+					Saturation vapor pressure (hPa)
+				p : array or float
+					Total pressure (hPa)
+
+				Returns
+				-------
+				w_s : array or float
+					Saturation vapor mixing ratio (kg/kg)
+				"""
+				epsilon = 0.622
+				return epsilon * e_s / (p - e_s)
+
+
+			# Make sure pressure ('P') has been extracted first
+			dataset_P = nc.Dataset(output_dir+'d02_P', 'r')		# 'r' is just to read the dataset, we do NOT want write privledges
+			pressure = dataset_P.variables['P']					# Pressure (hPa), already converted to hPa
+			perturb_theta = dataset.variables['T']    			# Perturbation Potential Temperature [K]
+			sfc_pressure = dataset.variables['PSFC']			# Surface Pressure (Pa), convert to hPa below by dividing by 100
+
 			# Create new .nc file
-			output_dataset = nc.Dataset(output_dir + file_name + '_Temperature', 'w', clobber=True)
+			output_dataset = nc.Dataset(output_dir + file_name + '_ws', 'w', clobber=True)
 			output_dataset.setncatts(dataset.__dict__)
 			# Create the dimensions
 			for dim_name, dim in dataset.dimensions.items():
 				output_dataset.createDimension(dim_name, len(dim))
 			# Create the variable, set attributes, and copy the variable into the new nc file
-			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['T'].dimensions)
-			temp_atts = dataset.variables['T'].__dict__
-			temp_atts.update({'description': 'Temperature'})
+			output_variable = output_dataset.createVariable(i, 'f4', dataset.variables['QVAPOR'].dimensions)
+			temp_atts = dataset.variables['QVAPOR'].__dict__
+			temp_atts.update({'description': 'Saturation vapor mixing ratio'})
 			output_variable.setncatts(temp_atts)
 			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
-				output_variable[t,...] = theta_to_temp(perturb_theta[t,...]+300, pressure[t,...], sfc_pressure[t,...]/100)	
+				temperature = theta_to_temp(perturb_theta[t,...]+300, pressure[t,...], sfc_pressure[t,...]/100)	
+				es = saturation_vapor_pressure_mk(temperature)
+				output_variable[t,...] = saturation_mixing_ratio(es, pressure[t,...])
 			# Close the output files
 			dataset_P.close()
-			output_dataset.close()
-			
+			output_dataset.close() 
 
 		# Latent Heating [K/s]
 		elif i == 'H_DIABATIC':
@@ -466,7 +634,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			temp_atts.update({'description':'Relative Humidity', 'units':'%'})
 			output_variable.setncatts(temp_atts)
 			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
-				qv = dataset.variables['QVAPOR'][t,...]
+				qv = dataset.variables['QVAPOR'][t]
 				pres = wrf.getvar(dataset, 'pres', timeidx=t, units='Pa', meta=False)
 				tkel = wrf.getvar(dataset, 'tk', timeidx=t, meta=False)
 				output_variable[t,...] = wrf.rh(qv, pres, tkel, meta=False)
@@ -1116,9 +1284,9 @@ input_file_d02 = parent_dir + raw_folder_d02  # Path to the raw input netCDF fil
 output_dir = parent_dir + '/L1/'  # Path to the input netCDF file
 
 
-## Declare variables needed: 'P', 'U', 'V', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
-# variable_name = ['P', 'Temperature', 'RH', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'RH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10','HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
-variable_name = ['Temperature']
+## Declare variables needed: 'P', 'U', 'V', 'ws', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'RH', 'CLDFRA', 'Theta', 'H_DIABATIC', 'HGT', 'VEGFRA', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'T2', 'U10', 'V10', 'PSFC', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC' 
+# variable_name = ['P', 'ws', 'PSFC', 'RR', 'HFX', 'QFX', 'LH', 'SMOIS', 'TSK', 'T2', 'Q2', 'U10', 'V10', 'HGT', 'VEGFRA', 'CAPE', 'CIN', 'LWUPT', 'LWUPB', 'LWDNT', 'LWDNB', 'SWUPT', 'SWUPB', 'SWDNT', 'SWDNB', 'LWUPTC', 'LWUPBC', 'LWDNTC', 'LWDNBC', 'SWUPTC', 'SWUPBC', 'SWDNTC', 'SWDNBC']
+variable_name = ['ws']
 
 ## Rain Rate exception, see 'RR' variable in 'extract_variable' function for more details
 # ctrl_file_d02 = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/raw/d02'

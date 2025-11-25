@@ -55,11 +55,13 @@ from wrf import default_fill
 #######################################################################################
 #######################################################################################
 
-## What variables would you like to integrate? (i.e., ['QV','W'])
-L2_vars = ['QV']
+## What variables would you like to integrate? (i.e., ['QV','W', 'ws'])
+L2_vars = ['QV','ws']
 ## What pressure levels are you integrating between?
-    # Keep in hPa, and '*100' converts to pascal within the function
+    # Keep in hPa, and '*100' in the function will converts to pascal
     # p_bot must be greater than p_top
+# If you have multiple variables to VI, add another '[]' within p_bot and p_top
+    # that corresond to the other variable VI bounds
 # p_bot=[[1000,1000,1000]]    #, [1000,1000,500]]
 # p_top=[[700,500,100]]       #, [700,100,200]]
 p_bot=[[1000]]    #, [1000,1000,500]]

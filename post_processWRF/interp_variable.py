@@ -38,6 +38,7 @@ Date: June 2023
         # QI == Ice mixing ratio 						[kg/kg]
         # QS == Snow mixing ratio 						[kg/kg]
         # QG == Graupel mixing ratio 					[kg/kg]
+        # ws == Saturation vapor mixing ratio           [kg/kg]
         # CLDFRA == Cloud Fraction                      [0-1]
         # Theta == Potential Temperature                [K]
         # Temp == Temperature                           [K]
@@ -111,9 +112,22 @@ output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 
 
 ## Declare the vertial levels you want to interpolate:
-vertical_levels = np.array(850)
+# vertical_levels = np.array(850)
 # vertical_levels = np.arange(1000,0,-50)
-# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+
+
+## Declare variables to interpolate (they must exist in 'var_info')
+# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
+# variables_to_process = ['U', 'V', 'ws', 'QV', 'CLDFRA', 'LowCLDFRA', 'MidCLDFRA', 'HighCLDFRA']
+variables_to_process = ['ws']
+
+
+## Open the input netCDF file
+dataset = nc.Dataset(input_file_d02, 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
+# Load in the dataset with the pressure variable to interpolate from
+dataset_pressure = nc.Dataset(pressure_file_d02, 'r')
+P_var = dataset_pressure.variables['P']    # Pressure [hPa]
 
 
 var_info = {
@@ -126,6 +140,7 @@ var_info = {
     'QI':           {'wrf_name': 'QICE',       'wrfpy_name': None,     'ref_dim': 'QICE'},
     'QS':           {'wrf_name': 'QSNOW',      'wrfpy_name': None,     'ref_dim': 'QSNOW'},
     'QG':           {'wrf_name': 'QGRAUP',     'wrfpy_name': None,     'ref_dim': 'QGRAUP'},
+    'ws':           {'wrf_name': '',           'wrfpy_name': None,     'ref_dim': 'QVAPOR'},
     'CLDFRA':       {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'CLDFRA'},
     'Theta':        {'wrf_name': 'T',          'wrfpy_name': None,     'ref_dim': 'T'},
     'H_DIABATIC':   {'wrf_name': 'H_DIABATIC', 'wrfpy_name': None,     'ref_dim': 'H_DIABATIC'},
@@ -135,22 +150,10 @@ var_info = {
     'LWAll':        {'wrf_name': 'RTHRATLW',   'wrfpy_name': None,     'ref_dim': 'RTHRATLW'},
     'RH':           {'wrf_name': '',           'wrfpy_name': None,     'ref_dim': 'QVAPOR'},
     'Temp':         {'wrf_name': '',           'wrfpy_name': 'tk',     'ref_dim': 'QVAPOR'},
-    'LowCLDFRA':    {'wrf_name': 'CLDFRA',      'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
-    'MidCLDFRA':    {'wrf_name': 'CLDFRA',      'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
-    'HighCLDFRA':   {'wrf_name': 'CLDFRA',      'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
+    'LowCLDFRA':    {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
+    'MidCLDFRA':    {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
+    'HighCLDFRA':   {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
 }
-
-# Open the input netCDF file
-dataset = nc.Dataset(input_file_d02, 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
-# Load in the dataset with the pressure variable to interpolate from
-pressure_dataset = nc.Dataset(pressure_file_d02, 'r')
-P_var = pressure_dataset.variables['P']    # Pressure [hPa]
-
-# Declare variables to interpolate (they must exist in 'var_info')
-# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
-# variables_to_process = ['U', 'V', 'QV', 'CLDFRA', 'LowCLDFRA', 'MidCLDFRA', 'HighCLDFRA']
-variables_to_process = ['U']
-
 
 ###############################################################################################################
 ###############################################################################################################
@@ -188,6 +191,11 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         template_atts = dataset.variables[wrf_name].__dict__
         template_atts.update({'stagger': '', 'coordinates': 'XLONG XLAT XTIME'})
         output_variable.setncatts(template_atts)
+    # Create new atts for ws (saturation vapor mixing ratio) based on P
+    elif variable_name in ['ws']:
+        template_atts = dataset.variables['P'].__dict__
+        template_atts.update({'description':'Saturation vapor pressure mixing ratio', 'units':'kg kg-1'})
+        output_variable.setncatts(template_atts)
     # Create new atts for RH based on P
     elif variable_name in ['RH']:
         template_atts = dataset.variables['P'].__dict__
@@ -220,14 +228,23 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
             output_variable[t,...] = interp
             print(f'Time index {t} stored')
 
+    elif variable_name in ['ws']:
+        dataset_ws = nc.Dataset(parent_dir+'/L1/d02_ws', 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
+        var = dataset_ws.variables['ws']                        # Saturation vapor mixing ratio [kg/kg]
+        for t in range(n_times):
+            interp = wrf.interplevel(var[t,...], P_var[t,...], vertical_levels, meta=False, missing=fill_value)
+            output_variable[t,...] = interp
+            print(f'Time index {t} stored')
+        dataset_ws.close()
+
     elif variable_name in ['RH']:
         for t in range(n_times):
             qv = dataset.variables['QVAPOR'][t]
-            pres = P_var[t,...]*100 # Convert from hPa to Pa
+            pres = P_var[t]*100 # Convert from hPa to Pa
             tkel = wrf.getvar(dataset, 'tk', timeidx=t, meta=False)
             var = wrf.rh(qv, pres, tkel, meta=False)
-            interp = wrf.interplevel(var, P_var[t,...], vertical_levels, meta=False, missing=fill_value)
-            output_variable[t,...] = interp
+            interp = wrf.interplevel(var, P_var[t], vertical_levels, meta=False, missing=fill_value)
+            output_variable[t] = interp
             print(f'Time index {t} stored')
 
     elif variable_name in ['LowCLDFRA','MidCLDFRA','HighCLDFRA']:
@@ -240,9 +257,10 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
                 lower_layer, upper_layer = 440, 150
         # Must use the interpolated CLDFRA
         input_file = f'{parent_dir}/L2/d02{exp_string}_interp_CLDFRA'
-        ds = nc.Dataset(input_file, 'r')
-        var = layer_weighted_average(ds, lower_layer=lower_layer, upper_layer=upper_layer, vertical_levels=vertical_levels)
+        dataset_cld = nc.Dataset(input_file, 'r')
+        var = layer_weighted_average(dataset_cld, lower_layer=lower_layer, upper_layer=upper_layer, vertical_levels=vertical_levels)
         output_variable[:] = var[:]	# not a large variable so no need to loop
+        dataset_cld.close()
 
     else:
         for t in range(n_times):
@@ -297,9 +315,9 @@ for var in variables_to_process:
         var_info=var_info
     )
 
-# Close dataset and pressure_dataset AFTER all variables are processed
+# Close dataset and dataset_pressure AFTER all variables are processed
 dataset.close()
-pressure_dataset.close()
+dataset_pressure.close()
 
 
 # In[5]:
