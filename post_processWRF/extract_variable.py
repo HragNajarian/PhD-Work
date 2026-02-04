@@ -422,7 +422,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			# The variable provided by WRF is actually perturbation potential temperature
 				# so we will have to convert it to potential temperature by adding 300 before converting into temperature
 				# Source: https://mailman.ucar.edu/pipermail/wrf-users/2010/001896.html
-			def theta_to_temp(theta, p, psfc):
+			def theta_to_temp(theta, p):
 				# PT = T * (P0/P)^(R/Cp)
 					# PT = Potential temperature/theta
 					# T = Temperature
@@ -433,7 +433,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 						# R/Cp = 0.286
 				# so
 				# T = PT / (P0/P)^(0.286)
-				temp = theta / (psfc/p)**0.286
+				temp = theta / (1000/p)**0.286
 				return temp
 			
 			def saturation_vapor_pressure_mk(Tk):
@@ -448,7 +448,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				# Covnert into np.array()
 				Tk = np.asarray(Tk)
 
-				# Murphy & Koop (2005) - over water
+				# Murphy & Koop (2005) - over water (EQ 10)
 				# ln(ew) = 54.842763 - 6763.22/T - 4.21*ln(T) + 0.000367*T
 				ln_ew = (
 					54.842763
@@ -460,7 +460,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 				)
 				ew = np.exp(ln_ew)  # Pa
 
-				# Murphy & Koop (2005) - over ice
+				# Murphy & Koop (2005) - over ice  (EQ 7)
 				# ln(ei) = 9.550426 - 5723.265/T + 3.53068*ln(T) - 0.00728332*T
 				ln_ei = (
 					9.550426
@@ -500,7 +500,6 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			dataset_P = nc.Dataset(output_dir+'d02_P', 'r')		# 'r' is just to read the dataset, we do NOT want write privledges
 			pressure = dataset_P.variables['P']					# Pressure (hPa), already converted to hPa
 			perturb_theta = dataset.variables['T']    			# Perturbation Potential Temperature [K]
-			sfc_pressure = dataset.variables['PSFC']			# Surface Pressure (Pa), convert to hPa below by dividing by 100
 
 			# Create new .nc file
 			output_dataset = nc.Dataset(output_dir + file_name + '_ws', 'w', clobber=True)
@@ -514,7 +513,7 @@ def extract_variable(input_file, variable_name, output_dir, file_name, ctrl_file
 			temp_atts.update({'description': 'Saturation vapor mixing ratio'})
 			output_variable.setncatts(temp_atts)
 			for t in range(dataset.dimensions['Time'].size):	# loop through time for large variables
-				temperature = theta_to_temp(perturb_theta[t,...]+300, pressure[t,...], sfc_pressure[t,...]/100)	
+				temperature = theta_to_temp(perturb_theta[t,...]+300, pressure[t,...])	
 				es = saturation_vapor_pressure_mk(temperature)
 				output_variable[t,...] = saturation_mixing_ratio(es, pressure[t,...])
 			# Close the output files
