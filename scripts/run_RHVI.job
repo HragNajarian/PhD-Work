@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --job-name=vert_integrate
+#SBATCH -p radclouds
+##SBATCH --dependency=afterok:27743348
+#SBATCH -N 1
+##SBATCH --ntasks 1
+##SBATCH --cpus-per-task=1
+##SBATCH --mem=20G
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
+##SBATCH --nodelist=c799,c966,c968,c969
+## c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
+#SBATCH --exclusive
+#SBATCH --output=outbatch.out%j.txt
+#SBATCH --error=outbatch.err%j.txt
+#SBATCH -t 48:00:00 # max job run time HH:MM:SS
+
+mamba init
+mamba activate WRF_Xarray
+python -u /home/hragnajarian/PhD/post_processWRF/vert_integrate_RH.py $1		# $1 is the parent_dir where directories raw, L1, L2, and L3 are located
