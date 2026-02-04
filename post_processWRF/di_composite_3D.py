@@ -19,7 +19,7 @@ from wrf import default_fill
 #######################################################################################
 
 ## What 3-D variables would you like to diurnally coposite?
-L2_vars = ['Temp']
+L2_vars = ['CLDFRA']
 ## Slice lat and lon bounds set for diurnal calculations
 lat_bound = [-10, 10]
 lon_bound = [80, 135]
@@ -32,7 +32,7 @@ time_bound = [np.datetime64('2015-11-23T01'), np.datetime64('2015-12-02T00')] if
 ## This is the string that's added depending on the experiment 
     # (i.e., '_sunrise', '_swap', '_adjLH', 
     # or '' if ctrl)
-exp_string = '_swap'
+exp_string = '_sunrise'
 
 #######################################################################################
 #######################################################################################

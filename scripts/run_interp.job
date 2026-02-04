@@ -1,12 +1,15 @@
 #!/bin/bash
 #SBATCH --job-name=interp
 #SBATCH -p radclouds
-##SBATCH --dependency=afterok:27404381
+#SBATCH --dependency=afterok:28004600
 #SBATCH -N 1
-#SBATCH -n 1
+#SBATCH --ntasks 1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=60G
 #SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
+##SBATCH --nodelist=c799,c966,c968,c969
 ## c793,c795,c797,c798,c799,c855,c965,c966,c968,c969
-#SBATCH --exclusive
+##SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
 #SBATCH -t 48:00:00 # max job run time HH:MM:SS

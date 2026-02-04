@@ -55,10 +55,10 @@ from wrf import default_fill
 #######################################################################################
 #######################################################################################
 
-## What variables would you like to integrate? (i.e., ['QV','W', 'ws'])
-L2_vars = ['QV','ws']
+## What variables would you like to integrate? (i.e., ['QV','W','ws'])
+L2_vars = ['ws']
 ## What pressure levels are you integrating between?
-    # Keep in hPa, and '*100' in the function will converts to pascal
+    # Keep in hPa, and the '*100' in the function will converts to pascal
     # p_bot must be greater than p_top
 # If you have multiple variables to VI, add another '[]' within p_bot and p_top
     # that corresond to the other variable VI bounds
@@ -135,7 +135,7 @@ for i, path in enumerate(L2_paths):
     start2_time = time.perf_counter()
 
     ## Open data set, index appropriate variable, assign coords, and replace fill values with nans
-    ds = xr.open_dataset(path, chunks='auto')#.isel(Time=[0])
+    ds = xr.open_dataset(path, chunks='auto')#.isel(Time=[0])   # Debugging purposes
     da = ds[L2_vars[i]].assign_coords(coords)
         # Important step over regions of terrain
     da = da.where(da != default_fill(np.float32))

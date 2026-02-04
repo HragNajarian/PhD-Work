@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=vert_integrate
 #SBATCH -p radclouds
-#SBATCH --dependency=afterok:27404382
+##SBATCH --dependency=afterok:27743348
 #SBATCH -N 1
 #SBATCH -n 1
-#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c874,c875,c969
-## c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
+#SBATCH --nodelist=c793,c795,c797,c798,c799,c855,c874,c875
+##SBATCH --nodelist=c799,c966,c968,c969
+##c793,c795,c797,c798,c799,c855,c874,c875,c965,c966,c968,c969
 #SBATCH --exclusive
 #SBATCH --output=outbatch.out%j.txt
 #SBATCH --error=outbatch.err%j.txt
