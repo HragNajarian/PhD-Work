@@ -8,7 +8,7 @@
 	# jupyter nbconvert cross_section_variable.ipynb --to python
 
 
-# In[1]:
+# In[ ]:
 
 
 # Purpose: Read variables and create cross sections of the variable. 
@@ -324,11 +324,13 @@ parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00'
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
 
+# times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-03T00')]
 times = [np.datetime64('2015-12-09T12'), np.datetime64('2015-12-20T12')]
 # times = [np.datetime64('2015-12-10T01'), np.datetime64('2015-12-10T03')]
 
 ## Assign the correct location directory depending on where you're trying to cross-section
-local_dirs = ['/L3/Sumatra_mid_central','/L3/Sumatra_northwest','/L3/Borneo_northwest']
+# local_dirs = ['/L3/Sumatra_mid_central','/L3/Sumatra_northwest','/L3/Borneo_northwest']
+local_dirs = ['/L3/Sumatra_mid_central_long_wide']
 
 ## Define cross-section settings
 region_settings = {
@@ -336,6 +338,12 @@ region_settings = {
         'start_coord': [-2.2, 103.2],
         'end_coord': [-6.7, 98.7],
         'width': 1.5,
+        'dx': 0.025
+    },
+    'Sumatra_mid_central_long_wide': {
+        'start_coord': [0.1, 105.5],
+        'end_coord': [-4.5, 100.9],
+        'width': 3,
         'dx': 0.025
     },
     'Sumatra_northwest': {
@@ -357,7 +365,7 @@ region_settings = {
     # icloud=0 at sunrise, starter_str='_sunrise'
     # icloud=1, starter_str=''
     # icloud=depends, starter_str='_oceanoff'
-starter_str = '_sunrise'
+starter_str = ''
 
 # Declare variables to interpolate (they must exist in 'l1_files' or 'l2_files')
     # variables_to_process = [
@@ -370,15 +378,16 @@ starter_str = '_sunrise'
     #     'Theta', 'LWAll', 'LWClear', 'SWAll', 'SWClear'
     # ]
 
-variables_to_process = [
-    # L1 varnames
-    'RR', 'U10', 'V10', 'PSFC', 'T2', 'HFX', 'QFX', 'LH', 'CAPE', 'CIN',
-    'LWDNB', 'LWUPB', 'LWDNBC', 'LWUPBC', 'SWDNB', 'SWUPB', 'SWDNBC', 'SWUPBC',
-    'LWDNT', 'LWUPT', 'LWDNTC', 'LWUPTC', 'SWDNT', 'SWUPT', 'SWDNTC', 'SWUPTC',
-    # L2 varnames
-    'U', 'V', 'LWAll', 'LWClear', 'SWAll', 'SWClear'
-]
-# variables_to_process = ['U','V']
+# variables_to_process = [
+#     # L1 varnames
+#     'RR', 'U10', 'V10', 'PSFC', 'T2', 'HFX', 'QFX', 'LH', 'CAPE', 'CIN',
+#     'LWDNB', 'LWUPB', 'LWDNBC', 'LWUPBC', 'SWDNB', 'SWUPB', 'SWDNBC', 'SWUPBC',
+#     'LWDNT', 'LWUPT', 'LWDNTC', 'LWUPTC', 'SWDNT', 'SWUPT', 'SWDNTC', 'SWUPTC',
+#     # L2 varnames
+#     'U', 'V', 'LWAll', 'LWClear', 'SWAll', 'SWClear'
+# ]
+
+variables_to_process = ['RR']
 
 ###############################################################################################################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ USER INPUTS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
