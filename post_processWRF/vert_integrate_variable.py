@@ -154,7 +154,7 @@ for i, path in enumerate(L2_paths):
         print('Vertically Integrated \N{check mark}', step1_time-step2_time, 'seconds')
 
         ## Change Variable Name and assign attributes
-        da_VI.name = L2_vars[i]
+        da_VI.name = 'VI_' + L2_vars[i]
         da_VI = da_VI.assign_attrs(
         Pressure_bounds=f'{p1}-{p2} hPa',
         Units=da.attrs['units']

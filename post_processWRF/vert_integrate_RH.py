@@ -108,7 +108,7 @@ step1_time = time.perf_counter()
 print('Calculate RH \N{check mark}', step1_time-step2_time, 'seconds')
 
 ## Change Variable Name and assign attributes
-da_VI_RH.name = 'RH'
+da_VI_RH.name = 'VI_RH'
 da_VI_RH = da_VI_RH.assign_attrs(
 Pressure_bounds=f'{p_bot[0]}-{p_top[0]} hPa',
 Units='%'
