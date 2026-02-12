@@ -317,22 +317,23 @@ def without_keys(d, keys):
 
 # ### WRF
 
-# In[12]:
+# In[17]:
 
 
 ##cd into the appropriate directory (L3) and then assign a parent directory
 parent_dir = sys.argv[1]
-# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/SN_CTRL'
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00'
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/CRFoff'
 
 # times = [np.datetime64('2015-11-22T12'), np.datetime64('2015-12-03T00')]
+# times = [np.datetime64('2015-11-23T01'), np.datetime64('2015-11-23T03')]  # Testing
 times = [np.datetime64('2015-12-09T12'), np.datetime64('2015-12-20T12')]
-# times = [np.datetime64('2015-12-10T01'), np.datetime64('2015-12-10T03')]
+# times = [np.datetime64('2015-12-10T01'), np.datetime64('2015-12-10T03')]  # Testing
 
 ## Assign the correct location directory depending on where you're trying to cross-section
-# local_dirs = ['/L3/Sumatra_mid_central','/L3/Sumatra_northwest','/L3/Borneo_northwest', '/L3/Sumatra_mid_central_long_wide', '/L3/Borneo_northwest_long_wide']
-local_dirs = ['/L3/Borneo_northwest_long_wide']
+# local_dirs = ['/L3/Sumatra_mid_central','/L3/Sumatra_northwest','/L3/Borneo_northwest',   '/L3/Sumatra_mid_central_long_wide', '/L3/Borneo_northwest_long_wide']
+local_dirs = ['/L3/Sumatra_mid_central_long_wide', '/L3/Borneo_northwest_long_wide']
 
 ## Define cross-section settings
 region_settings = {
@@ -393,9 +394,12 @@ starter_str = ''
 #     'LWDNT', 'LWUPT', 'LWDNTC', 'LWUPTC', 'SWDNT', 'SWUPT', 'SWDNTC', 'SWUPTC',
 #     # L2 varnames
 #     'U', 'V', 'LWAll', 'LWClear', 'SWAll', 'SWClear'
+#     # L4 varnames
+#     'VI_QV', 'VI_RH', 'VI_ws'
 # ]
 
-variables_to_process = ['RR']
+variables_to_process = ['RR', 'U10', 'V10', 'U', 'V', 'VI_QV', 'VI_RH', 'VI_ws']
+
 
 ###############################################################################################################
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ USER INPUTS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^#
@@ -452,6 +456,12 @@ l2_files = {
     f'd02{starter_str}_interp_SWAll':     ('K/s',     'SWAll',     'Interpolated shortwave heating (all-sky)'),
     f'd02{starter_str}_interp_SWClear':   ('K/s',     'SWClear',   'Interpolated shortwave heating (clear-sky)'),
 }
+    # Vertically Integrated data
+l4_files = {
+    f'd02{starter_str}_VI_QV_1000-100':         ('kg kg-1',     'VI_QV',       'Vertically Integrated (1000-100hPa) Water Vapor Mixing Ratio'),
+    f'd02{starter_str}_VI_RH_1000-100':         ('%',           'VI_RH',       'Vertically Integrated (1000-100hPa) Relative Humidity'),
+    f'd02{starter_str}_VI_ws_1000-100':         ('kg kg-1',     'VI_ws',       'Vertically Integrated (1000-100hPa) Saturation Water Vapor Mixing Ratio'),
+}
 
 
 ## Build structured dictionary
@@ -478,6 +488,16 @@ files = {
             "description": desc
         }
         for var, (unit, varname, desc) in l2_files.items()
+        if varname in variables_to_process
+    },
+    'L4': {
+        var: {
+            "path": build_path(parent_dir, 'L4', var),
+            "unit": unit,
+            "varname": varname,
+            "description": desc
+        }
+        for var, (unit, varname, desc) in l4_files.items()
         if varname in variables_to_process
     }
 }
