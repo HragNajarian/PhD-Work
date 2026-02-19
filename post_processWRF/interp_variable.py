@@ -112,15 +112,15 @@ output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 
 
 ## Declare the vertial levels you want to interpolate:
-# vertical_levels = np.array(850)
+vertical_levels = np.array(850)
 # vertical_levels = np.arange(1000,0,-50)
-vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
 
 ## Declare variables to interpolate (they must exist in 'var_info')
 # variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
 # variables_to_process = ['U', 'V', 'ws', 'QV', 'CLDFRA', 'LowCLDFRA', 'MidCLDFRA', 'HighCLDFRA']
-variables_to_process = ['ws']
+variables_to_process = ['V']
 
 
 ## Open the input netCDF file
