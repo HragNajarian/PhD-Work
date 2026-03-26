@@ -100,13 +100,13 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
     dp = da.bottom_top.diff('bottom_top').sel(bottom_top=slice(p_bot, p_top))*100
 
     # Calculate mean value between levels
-    da_roll = da.rolling(bottom_top=2).mean().sel(bottom_top=dp.bottom_top.values)
+    da_roll = np.abs(da.rolling(bottom_top=2).mean().sel(bottom_top=dp.bottom_top.values))  # if issues, it's probably due to np.abs converting it to an numpy array
 
     # Broadcast dp to match da_roll
     dp_broadcasted = dp.broadcast_like(da_roll)
 
     # Perform integration (sum over vertical)
-    da_integrated = -(da_roll * dp_broadcasted).sum(dim='bottom_top') / g
+    da_integrated = (da_roll * dp_broadcasted).sum(dim='bottom_top') / g
 
     # Convert to float32
     da_integrated = da_integrated.astype(np.float32)
