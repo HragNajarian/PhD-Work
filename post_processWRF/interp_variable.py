@@ -17,7 +17,7 @@ Date: June 2023
 	# jupyter nbconvert interp_variable.ipynb --to python
 
 
-# In[3]:
+# In[4]:
 
 
 # Purpose: Vertically interpolate your WRF datasets and then make it into its own .nc file!
@@ -90,7 +90,7 @@ import time
     # parent_dir = '/where/your/wrfoutfiles/exist'
 parent_dir = sys.argv[1]
 # Example:
-    # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-12-09-12--12-20-00/swap_rh/norst'
+# parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00/SN_CTRL'
 
 ## This is the string that's added depending on the experiment 
     # (i.e., '_sunrise', '_swap', '_adjLH', 
@@ -112,15 +112,15 @@ output_dir = parent_dir + '/L2/'  # Path to the input netCDF file
 
 
 ## Declare the vertial levels you want to interpolate:
-vertical_levels = np.array(850)
+# vertical_levels = np.array(850)
 # vertical_levels = np.arange(1000,0,-50)
-# vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
+vertical_levels = np.concatenate((np.arange(1000,950,-10),np.arange(950,350,-30),np.arange(350,0,-50)))
 
 
 ## Declare variables to interpolate (they must exist in 'var_info')
-# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA']
+# variables_to_process = ['U', 'V', 'W', 'QV', 'QC', 'QR', 'QI', 'QS', 'QG', 'CLDFRA', 'Theta', 'H_DIABATIC', 'SWClear', 'SWAll', 'LWClear', 'LWAll', 'RH', 'Temp','LowCLDFRA','MidCLDFRA','HighCLDFRA', 'QV_ADV']
 # variables_to_process = ['U', 'V', 'ws', 'QV', 'CLDFRA', 'LowCLDFRA', 'MidCLDFRA', 'HighCLDFRA']
-variables_to_process = ['V']
+variables_to_process = ['QV_ADV']
 
 
 ## Open the input netCDF file
@@ -128,6 +128,7 @@ dataset = nc.Dataset(input_file_d02, 'r')   # 'r' is just to read the dataset, w
 # Load in the dataset with the pressure variable to interpolate from
 dataset_pressure = nc.Dataset(pressure_file_d02, 'r')
 P_var = dataset_pressure.variables['P']    # Pressure [hPa]
+
 
 
 var_info = {
@@ -153,6 +154,8 @@ var_info = {
     'LowCLDFRA':    {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
     'MidCLDFRA':    {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
     'HighCLDFRA':   {'wrf_name': 'CLDFRA',     'wrfpy_name': None,     'ref_dim': 'PSFC'},          # 2-D dimensions
+    ## Calculated
+    'QV_ADV':       {'wrf_name': '',           'wrfpy_name': None,     'ref_dim': 'QVAPOR'},
 }
 
 ###############################################################################################################
@@ -191,6 +194,11 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         template_atts = dataset.variables[wrf_name].__dict__
         template_atts.update({'stagger': '', 'coordinates': 'XLONG XLAT XTIME'})
         output_variable.setncatts(template_atts)
+    # Create new atts for QV_ADV (Water Vapor Advection) based on P
+    elif variable_name in ['QV_ADV']:
+        template_atts = dataset.variables['P'].__dict__
+        template_atts.update({'description': 'Horizontal moisture advection', 'units':'kg kg-1 s-1'})
+        output_variable.setncatts(template_atts)
     # Create new atts for ws (saturation vapor mixing ratio) based on P
     elif variable_name in ['ws']:
         template_atts = dataset.variables['P'].__dict__
@@ -227,7 +235,13 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
             interp = wrf.interplevel(var, P_var[t,...], vertical_levels, meta=False, missing=fill_value)
             output_variable[t,...] = interp
             print(f'Time index {t} stored')
-
+    elif variable_name in ['QV_ADV']:
+        for t in range(n_times):
+            var = compute_qv_advection(dataset, t)
+            var.set_fill_value(fill_value)
+            interp = wrf.interplevel(var, P_var[t, ...], vertical_levels, meta=False, missing=fill_value)
+            output_variable[t, ...] = interp
+            print(f'Time index {t} stored')
     elif variable_name in ['ws']:
         dataset_ws = nc.Dataset(parent_dir+'/L1/d02_ws', 'r')   # 'r' is just to read the dataset, we do NOT want write privledges
         var = dataset_ws.variables['ws']                        # Saturation vapor mixing ratio [kg/kg]
@@ -236,7 +250,6 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
             output_variable[t,...] = interp
             print(f'Time index {t} stored')
         dataset_ws.close()
-
     elif variable_name in ['RH']:
         for t in range(n_times):
             qv = dataset.variables['QVAPOR'][t]
@@ -246,7 +259,6 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
             interp = wrf.interplevel(var, P_var[t], vertical_levels, meta=False, missing=fill_value)
             output_variable[t] = interp
             print(f'Time index {t} stored')
-
     elif variable_name in ['LowCLDFRA','MidCLDFRA','HighCLDFRA']:
         match variable_name:
             case 'LowCLDFRA':
@@ -261,7 +273,6 @@ def interp_variable(dataset, P_var, variable_name, output_dir, vertical_levels, 
         var = layer_weighted_average(dataset_cld, lower_layer=lower_layer, upper_layer=upper_layer, vertical_levels=vertical_levels)
         output_variable[:] = var[:]	# not a large variable so no need to loop
         dataset_cld.close()
-
     else:
         for t in range(n_times):
             var = dataset.variables[wrf_name][t, ...]
@@ -301,6 +312,40 @@ def layer_weighted_average(ds, lower_layer, upper_layer, vertical_levels):
     variable = np.array(variable)
 
     return variable
+
+
+# Calculation of Moisture Advection
+def compute_qv_advection(dataset, t):
+    """
+    Compute horizontal moisture advection on native levels:
+    QV_ADV = -(u dqv/dx + v dqv/dy)
+
+    Returns:
+        np.ndarray with same shape as QVAPOR (bottom_top, south_north, west_east)
+    """
+
+    # --- Get variables on mass grid ---
+    qv = dataset.variables['QVAPOR'][t, ...]   # (z, y, x)
+
+    # Destagger winds to mass grid
+    u_stag = dataset.variables['U'][t, ...]    # (z, y, x+1)
+    v_stag = dataset.variables['V'][t, ...]    # (z, y+1, x)
+
+    u = wrf.destagger(u_stag, -1)              # -> (z, y, x)
+    v = wrf.destagger(v_stag, -2)              # -> (z, y, x)
+
+    # --- Grid spacing (constant in WRF) ---
+    dx = dataset.DX
+    dy = dataset.DY
+
+    # --- Horizontal gradients (finite difference) ---
+    dqdx = np.gradient(qv, dx, axis=2)  # x-direction
+    dqdy = np.gradient(qv, dy, axis=1)  # y-direction
+
+    # --- Advection ---
+    qv_adv = -(u * dqdx + v * dqdy)
+
+    return qv_adv
 
 
 # Loop through variables

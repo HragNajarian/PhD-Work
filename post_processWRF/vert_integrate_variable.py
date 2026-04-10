@@ -55,8 +55,8 @@ from wrf import default_fill
 #######################################################################################
 #######################################################################################
 
-## What variables would you like to integrate? (i.e., ['QV','W','ws'])
-L2_vars = ['ws']
+## What variables would you like to integrate? (i.e., ['QV','W','U','V','ws','QV_ADV'])
+L2_vars = ['V']
 ## What pressure levels are you integrating between?
     # Keep in hPa, and the '*100' in the function will converts to pascal
     # p_bot must be greater than p_top
@@ -65,11 +65,16 @@ L2_vars = ['ws']
 # p_bot=[[1000,1000,1000]]    #, [1000,1000,500]]
 # p_top=[[700,500,100]]       #, [700,100,200]]
 p_bot=[[1000]]    #, [1000,1000,500]]
-p_top=[[100]]     #, [700,100,200]]
+p_top=[[900]]     #, [700,100,200]]
+
+dx = 3000.0     # meters
+dy = 3000.0     # meters
 
 ## Assign parent_dir that is where your raw, L1, L2, etc. directories live.
 parent_dir = sys.argv[1]
 # parent_dir = '/ourdisk/hpc/radclouds/auto_archive_notyet/tape_2copies/hragnajarian/wrfout.files/10day-2015-11-22-12--12-03-00'
+
+print(f'You are in directory: {parent_dir}\n')
 
 ## This is the string that's added depending on the experiment 
     # (i.e., '_sunrise', '_swap', '_adjLH', 
@@ -100,13 +105,13 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
     dp = da.bottom_top.diff('bottom_top').sel(bottom_top=slice(p_bot, p_top))*100
 
     # Calculate mean value between levels
-    da_roll = np.abs(da.rolling(bottom_top=2).mean().sel(bottom_top=dp.bottom_top.values))  # if issues, it's probably due to np.abs converting it to an numpy array
+    da_roll = da.rolling(bottom_top=2).mean().sel(bottom_top=dp.bottom_top.values)
 
     # Broadcast dp to match da_roll
     dp_broadcasted = dp.broadcast_like(da_roll)
 
     # Perform integration (sum over vertical)
-    da_integrated = (da_roll * dp_broadcasted).sum(dim='bottom_top') / g
+    da_integrated = -(da_roll * dp_broadcasted).sum(dim='bottom_top') / g
 
     # Convert to float32
     da_integrated = da_integrated.astype(np.float32)
@@ -134,11 +139,17 @@ L2_paths = [os.path.join(L2_dir, f) for f in os.listdir(L2_dir) if f in L2_var_f
 for i, path in enumerate(L2_paths):
     start2_time = time.perf_counter()
 
-    ## Open data set, index appropriate variable, assign coords, and replace fill values with nans
-    ds = xr.open_dataset(path, chunks='auto')#.isel(Time=[0])   # Debugging purposes
+    # ## Open data set, index appropriate variable, assign coords, and replace fill values with nans
+    #     # Moisture Advection
+    # if L2_vars[i] == 'QV_ADV':
+    #     da = calculate_QV_ADV(parent_dir, exp_string, coords, dx, dy)
+
+    # else:
+    ds = xr.open_dataset(path, chunks='auto')
     da = ds[L2_vars[i]].assign_coords(coords)
-        # Important step over regions of terrain
+    # Important step over regions of terrain
     da = da.where(da != default_fill(np.float32))
+
     step2_time = time.perf_counter()
     print('Open Data Set \N{check mark}', step2_time-start2_time, 'seconds')
 
