@@ -56,7 +56,7 @@ from wrf import default_fill
 #######################################################################################
 
 ## What variables would you like to integrate? (i.e., ['QV','W','U','V','ws','QV_ADV'])
-L2_vars = ['V']
+L2_vars = ['U','V']
 ## What pressure levels are you integrating between?
     # Keep in hPa, and the '*100' in the function will converts to pascal
     # p_bot must be greater than p_top
@@ -64,8 +64,8 @@ L2_vars = ['V']
     # that corresond to the other variable VI bounds
 # p_bot=[[1000,1000,1000]]    #, [1000,1000,500]]
 # p_top=[[700,500,100]]       #, [700,100,200]]
-p_bot=[[1000]]    #, [1000,1000,500]]
-p_top=[[900]]     #, [700,100,200]]
+p_bot=[[1000],[1000]]    #, [1000,1000,500]]
+p_top=[[850],[850]]     #, [700,100,200]]
 
 dx = 3000.0     # meters
 dy = 3000.0     # meters
@@ -111,7 +111,23 @@ def vertical_integration(da, p_bot, p_top, g=9.81):
     dp_broadcasted = dp.broadcast_like(da_roll)
 
     # Perform integration (sum over vertical)
-    da_integrated = -(da_roll * dp_broadcasted).sum(dim='bottom_top') / g
+        # Pressure-weighted mean wind
+            # Avoid mass-weighting winds because this can lead to calculating column-integrated momentum, not wind speed
+    if L2_vars[i] in ['U','V','W']:
+        # dp_total = dp.sum(dim='bottom_top')
+
+        # Over high terrain, pressure layers will be limited, so make sure dp_total is dependent on this so it doesn't 
+            # incorrectly average over the enitre pressure layer, but instead over the pressure layer that is available 
+            # at those higher terrains.
+            # i.e., 1000-850 pressure layer over high terrain might only have pressure values 890, and 860. It wouldn't 
+            # make sense to average over 150 hPa in da_integrated.
+        # Remove dp pressure values where da_roll does not exist
+        dp_masked = dp_broadcasted.where(~np.isnan(da_roll))
+        dp_total = dp_masked.sum(dim='bottom_top')
+        da_integrated = -(da_roll * dp_broadcasted).sum(dim='bottom_top') / dp_total
+    else:
+        # Mass-weighted integral
+        da_integrated = -(da_roll * dp_broadcasted).sum(dim='bottom_top') / g
 
     # Convert to float32
     da_integrated = da_integrated.astype(np.float32)
@@ -140,11 +156,6 @@ for i, path in enumerate(L2_paths):
     start2_time = time.perf_counter()
 
     # ## Open data set, index appropriate variable, assign coords, and replace fill values with nans
-    #     # Moisture Advection
-    # if L2_vars[i] == 'QV_ADV':
-    #     da = calculate_QV_ADV(parent_dir, exp_string, coords, dx, dy)
-
-    # else:
     ds = xr.open_dataset(path, chunks='auto')
     da = ds[L2_vars[i]].assign_coords(coords)
     # Important step over regions of terrain
