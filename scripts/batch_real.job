@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=job_real
 #SBATCH --dependency=afterok:17468405
-#SBATCH -p radclouds
+#SBATCH -p radclouds_el9
 #SBATCH -N 1
 #SBATCH -n 56
 #SBATCH --nodelist=c795

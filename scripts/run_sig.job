@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sig_test
-#SBATCH -p radclouds
+#SBATCH -p radclouds_el9
 ##SBATCH --dependency
 #SBATCH -N 1
 #SBATCH -n 56

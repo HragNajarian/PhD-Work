@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=cross
-#SBATCH -p radclouds
+#SBATCH -p radclouds_el9
 ##SBATCH --dependency=afterok:25098976
 #SBATCH -N 1
 #SBATCH -n 56

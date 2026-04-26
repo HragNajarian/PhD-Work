@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=interp
-#SBATCH -p radclouds
+#SBATCH -p radclouds_el9
 ##SBATCH --dependency=afterok:28004600
 #SBATCH -N 1
 #SBATCH --ntasks 1

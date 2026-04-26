@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=vert_integrate
-#SBATCH -p radclouds
+#SBATCH -p radclouds_el9
 ##SBATCH --dependency
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mas_post
 ##SBATCH --dependency=afterok:26347865
-#SBATCH -p radclouds
+#SBATCH -p radclouds_el9
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --nodelist=c799,c966,c968,c969
